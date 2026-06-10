@@ -1,0 +1,17 @@
+appId: com.lixuhui.personal-toolbox
+productName: 个人工具箱
+asar: true
+directories:
+  output: dist
+files:
+  - electron/**/*
+  - src/**/*
+  - assets/**/*
+mac:
+  category: public.app-category.productivity
+  icon: assets/icon.icns
+  target:
+    - target: dir
+    - target: dmg
+dmg:
+  artifactName: 个人工具箱-${version}.${ext}

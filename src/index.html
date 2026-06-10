@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: file:; connect-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>个人工具箱</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <div class="brand">
+          <img src="../assets/logo.png" alt="" />
+          <div>
+            <h1>个人工具箱</h1>
+            <p id="vaultLabel">Vault 未连接</p>
+          </div>
+        </div>
+        <button id="sidebarToggleButton" class="sidebar-toggle" type="button" aria-label="收起侧栏" title="收起侧栏">‹</button>
+        <nav class="module-nav" aria-label="模块导航">
+          <button class="nav-button is-active" type="button" data-module="dashboard" data-icon="⌂" aria-label="主面板" title="主面板"><span class="nav-label">主面板</span></button>
+          <button class="nav-button" type="button" data-module="memo" data-icon="✎" aria-label="每日备忘" title="每日备忘"><span class="nav-label">每日备忘</span></button>
+          <button class="nav-button" type="button" data-module="smoke" data-icon="✓" aria-label="冒烟记录" title="冒烟记录"><span class="nav-label">冒烟记录</span></button>
+          <button class="nav-button" type="button" data-module="settings" data-icon="⚙" aria-label="设置" title="设置"><span class="nav-label">设置</span></button>
+        </nav>
+      </aside>
+
+      <main class="app-main">
+        <section id="dashboardModule" class="module is-active" aria-label="主面板">
+          <header class="module-head">
+            <div>
+              <h2>主面板</h2>
+              <p id="dashboardSummary">今日概览</p>
+            </div>
+          </header>
+
+          <div class="dashboard-grid">
+            <article class="dashboard-tile time-tile">
+              <span class="tile-label">当前时间</span>
+              <strong id="currentTimeText">--:--</strong>
+              <p id="currentDateText">-</p>
+            </article>
+            <button id="todayTodoTile" class="dashboard-tile todo-tile" type="button">
+              <span class="tile-label">今日待办数量</span>
+              <strong id="todayTodoCount">0</strong>
+              <p id="todayTodoSummary">读取中</p>
+            </button>
+            <article class="dashboard-dizigui">
+              <div class="dizigui-head">
+                <span class="tile-label">每日一句弟子规</span>
+                <strong id="dailyDiziguiText">-</strong>
+              </div>
+              <p id="dailyDiziguiMeaning">-</p>
+            </article>
+            <article class="dashboard-poem">
+              <div class="poem-head">
+                <span class="tile-label">每日一首诗</span>
+                <strong id="dailyPoemTitle">-</strong>
+              </div>
+              <div id="dailyPoemContent" class="poem-content">-</div>
+              <p id="dailyPoemSource">-</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="smokeModule" class="module" aria-label="冒烟记录">
+          <header class="module-head">
+            <div>
+              <h2>冒烟记录</h2>
+              <p id="smokeSummary">读取中</p>
+            </div>
+            <div class="module-actions">
+              <label class="version-picker">
+                <span>版本</span>
+                <select id="smokeVersionSelect"></select>
+              </label>
+              <button id="newVersionButton" type="button">新建版本</button>
+              <button id="renameVersionButton" type="button">重命名版本</button>
+              <button id="deleteVersionButton" class="danger" type="button">删除版本</button>
+              <button id="importRunPlanButton" type="button">导入 Run Plan</button>
+              <button id="exportMarkdownButton" type="button">导出 Markdown</button>
+              <label class="search-box">
+                <span>搜索</span>
+                <input id="smokeSearchInput" type="search" placeholder="场景、Case、步骤" autocomplete="off" />
+              </label>
+            </div>
+          </header>
+
+          <div class="smoke-workspace">
+            <aside class="panel scenes-panel">
+              <div class="panel-head">
+                <h3>场景</h3>
+                <div class="panel-actions">
+                  <button id="toggleScenesPanelButton" class="small" type="button" aria-label="收起场景列" title="收起场景列">‹</button>
+                  <button id="newSceneButton" class="primary small" type="button">+ 新建</button>
+                  <div class="scene-status-filter">
+                    <button id="sceneStatusFilterButton" class="small" type="button" aria-haspopup="true" aria-expanded="false">状态筛选</button>
+                    <div id="sceneStatusFilterMenu" class="scene-status-menu" hidden></div>
+                  </div>
+                  <button id="deleteSelectedScenesButton" class="danger small" type="button" disabled>批量删除</button>
+                </div>
+              </div>
+              <div id="scenesList" class="record-list"></div>
+            </aside>
+
+            <aside class="panel cases-panel">
+              <div class="panel-head">
+                <h3>Case</h3>
+                <div class="panel-actions">
+                  <button id="deleteSelectedCasesButton" class="danger small" type="button" disabled>批量删除</button>
+                  <button id="newCaseButton" class="primary small" type="button">+ 新建 Case</button>
+                </div>
+              </div>
+              <div id="sceneDetail" class="detail-form"></div>
+              <div id="casesList" class="record-list"></div>
+            </aside>
+
+            <section class="panel editor-panel">
+              <div class="panel-head">
+                <h3>编辑 / 执行</h3>
+              </div>
+              <div id="caseEditor" class="case-editor"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="memoModule" class="module" aria-label="每日备忘">
+          <header class="module-head">
+            <div>
+              <h2>每日备忘</h2>
+              <p id="memoSummary">读取中</p>
+            </div>
+            <div class="module-actions">
+              <div class="segmented">
+                <button id="memoListViewButton" class="is-active" type="button">备忘</button>
+                <button id="memoDailyViewButton" type="button">日报</button>
+              </div>
+              <label id="memoSearchLabel" class="search-box">
+                <span>搜索</span>
+                <input id="memoSearchInput" type="search" placeholder="搜索备忘" autocomplete="off" />
+              </label>
+            </div>
+          </header>
+
+          <section id="memoListView" class="memo-view is-active">
+            <form id="memoForm" class="memo-composer">
+              <input id="memoInput" type="text" placeholder="新建备忘标题" autocomplete="off" />
+            </form>
+            <div id="memoList" class="memo-list"></div>
+          </section>
+
+          <section id="memoDailyView" class="memo-view">
+            <div class="daily-toolbar panel">
+              <div>
+                <h3 id="dailyTitle">昨日报</h3>
+                <p id="dailySummary">0 条</p>
+              </div>
+              <div class="daily-settings">
+                <label>
+                  <input id="dailyEnabledInput" type="checkbox" />
+                  <span>提醒</span>
+                </label>
+                <input id="dailyTimeInput" type="time" />
+              </div>
+            </div>
+            <div id="dailyReportList" class="memo-list"></div>
+          </section>
+        </section>
+
+        <section id="settingsModule" class="module" aria-label="设置">
+          <header class="module-head">
+            <div>
+              <h2>设置</h2>
+              <p>Obsidian Vault 与本地数据路径</p>
+            </div>
+          </header>
+          <section class="settings-card panel">
+            <label class="field">
+              <span>Obsidian Vault</span>
+              <input id="vaultPathInput" type="text" autocomplete="off" />
+            </label>
+            <div class="inline-actions">
+              <button id="saveVaultPathButton" class="primary" type="button">保存路径</button>
+              <button id="chooseVaultPathButton" type="button">选择目录</button>
+            </div>
+            <dl class="path-list">
+              <div>
+                <dt>冒烟数据</dt>
+                <dd id="smokeDataPathText">-</dd>
+              </div>
+              <div>
+                <dt>备忘数据</dt>
+                <dd id="memoDataPathText">-</dd>
+              </div>
+            </dl>
+          </section>
+          <section class="settings-card panel">
+            <label class="field">
+              <span>极速备忘</span>
+              <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>打开主窗口</span>
+              <input id="openMainShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
+            </label>
+            <div class="inline-actions">
+              <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
+            </div>
+            <p class="setting-help">点击输入框后按下组合键。极速备忘弹出独立输入框；打开主窗口会唤起完整 App。</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+    <div id="memoDrawerBackdrop" class="drawer-backdrop" hidden></div>
+    <aside id="memoDrawer" class="memo-drawer" aria-label="备忘详情" hidden></aside>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

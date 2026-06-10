@@ -1,0 +1,19 @@
+{
+  "name": "personal-toolbox-mac",
+  "version": "0.1.0",
+  "description": "个人工具箱 Mac App",
+  "main": "electron/main.js",
+  "author": "carrylee99",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron .",
+    "icons": "bash scripts/generate-icons.sh",
+    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/data/config-store.js && node --check electron/data/smoke-store.js && node --check electron/data/memo-store.js && node --check electron/data/daily-poem-service.js && node --check src/renderer.js && node --check src/quick-memo.js",
+    "build:mac": "npm run icons && electron-builder --mac dir --config electron-builder.yml",
+    "dist": "npm run icons && electron-builder --mac dmg --config electron-builder.yml"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  }
+}

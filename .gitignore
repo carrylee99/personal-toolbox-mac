@@ -1,0 +1,27 @@
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.dmg
+*.blockmap
+
+# Generated macOS icons
+assets/icon.icns
+assets/icon.iconset/
+
+# Local app/user data
+.personal-toolbox/
+Daily Memos/
+Smoke Tests/
+
+# Local-only imports and backups
+imports/
+backups/
+
+# Logs and environment
+*.log
+.env
+.env.*

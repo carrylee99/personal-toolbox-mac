@@ -1,0 +1,105 @@
+:root {
+  color: #101828;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.quick-shell {
+  width: calc(100vw - 16px);
+  height: calc(100vh - 16px);
+  margin: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 22px;
+  padding: 16px 18px 14px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(245, 248, 255, 0.66)),
+    rgba(255, 255, 255, 0.58);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  -webkit-app-region: drag;
+}
+
+.quick-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  height: 100%;
+}
+
+.quick-field {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.quick-slogan {
+  overflow: hidden;
+  color: rgba(16, 24, 40, 0.68);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+textarea {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 70px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #101828;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.45;
+  outline: none;
+  padding: 0;
+  resize: none;
+  -webkit-app-region: no-drag;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+textarea:disabled {
+  opacity: 0.72;
+}
+
+.quick-status {
+  min-height: 15px;
+  margin: 0;
+  color: rgba(102, 112, 133, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.quick-form.is-saving .quick-status {
+  color: #2563eb;
+}
+
+.quick-form.is-error .quick-status {
+  color: #b42318;
+}
