@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Notification } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electron");
 const { ConfigStore } = require("./data/config-store");
 const { SmokeStore } = require("./data/smoke-store");
 const { MemoStore } = require("./data/memo-store");
@@ -14,8 +14,6 @@ let configStore = null;
 let smokeStore = null;
 let memoStore = null;
 let dailyPoemService = null;
-let memoReminderTimer = null;
-let memoReminderRunning = false;
 let registeredQuickMemoShortcut = "";
 let registeredOpenMainShortcut = "";
 let lastQuickMemoClosedAt = 0;
@@ -27,6 +25,15 @@ function sanitizeExportFileName(value) {
     .replace(/[\\/:*?"<>|#[\]^]/g, "-")
     .replace(/\s+/g, " ")
     .slice(0, 80) || "冒烟记录";
+}
+
+function todayKey() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
 }
 
 function notifyMemoChanged() {
@@ -183,6 +190,7 @@ function registerIpcHandlers() {
     const targetPath = /\.m(?:arkdown|d)$/i.test(result.filePath) ? result.filePath : result.filePath + ".md";
     return smokeStore.exportCurrentVersion(targetPath);
   });
+  ipcMain.handle("smoke:saveSettings", (_event, settings) => smokeStore.saveSettings(settings));
   ipcMain.handle("smoke:createScene", (_event, payload) => smokeStore.createScene(payload));
   ipcMain.handle("smoke:createVersion", (_event, payload) => smokeStore.createVersion(payload));
   ipcMain.handle("smoke:updateVersion", (_event, versionId, patch) => smokeStore.updateVersion(versionId, patch));
@@ -219,9 +227,56 @@ function registerIpcHandlers() {
     await memoStore.deleteNote(noteId);
     notifyMemoChanged();
   });
-  ipcMain.handle("memo:getDailySettings", () => memoStore.getDailyReportSettings());
-  ipcMain.handle("memo:saveDailySettings", (_event, settings) => memoStore.saveDailyReportSettings(settings));
-  ipcMain.handle("memo:getDailyReport", (_event, dateKey) => memoStore.getDailyReport(dateKey));
+  ipcMain.handle("memo:importNotes", async () => {
+    const vaultPath = await configStore.getVaultPath();
+    const result = await dialog.showOpenDialog(mainWindow || undefined, {
+      title: "导入备忘录 JSON",
+      defaultPath: vaultPath,
+      filters: [
+        { name: "JSON", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] }
+      ],
+      properties: ["openFile"]
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return { canceled: true };
+    }
+    const summary = await memoStore.importNotes(result.filePaths[0]);
+    notifyMemoChanged();
+    return Object.assign({ canceled: false }, summary);
+  });
+  ipcMain.handle("memo:exportNotes", async () => {
+    const vaultPath = await configStore.getVaultPath();
+    const result = await dialog.showSaveDialog(mainWindow || undefined, {
+      title: "导出备忘录 JSON",
+      defaultPath: path.join(vaultPath, "memo-export-" + todayKey() + ".json"),
+      filters: [
+        { name: "JSON", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+    const targetPath = /\.json$/i.test(result.filePath) ? result.filePath : result.filePath + ".json";
+    return memoStore.exportNotes(targetPath);
+  });
+  ipcMain.handle("memo:saveImportSample", async () => {
+    const vaultPath = await configStore.getVaultPath();
+    const result = await dialog.showSaveDialog(mainWindow || undefined, {
+      title: "保存备忘录导入样例",
+      defaultPath: path.join(vaultPath, "memo-import-sample.json"),
+      filters: [
+        { name: "JSON", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+    const targetPath = /\.json$/i.test(result.filePath) ? result.filePath : result.filePath + ".json";
+    return memoStore.writeImportSample(targetPath);
+  });
   ipcMain.handle("poem:getDaily", (_event, dateKey) => dailyPoemService.getDailyPoem(dateKey));
   ipcMain.handle("quickMemo:close", () => {
     if (quickMemoWindow && !quickMemoWindow.isDestroyed()) {
@@ -376,39 +431,6 @@ async function setShortcuts(shortcuts) {
   }
 }
 
-async function runMemoReminderCheck() {
-  if (memoReminderRunning) {
-    return;
-  }
-  memoReminderRunning = true;
-  try {
-    const candidate = await memoStore.getNotificationCandidate(new Date());
-    if (!candidate) {
-      return;
-    }
-    if (Notification.isSupported()) {
-      new Notification({
-        title: candidate.title,
-        body: candidate.body,
-        icon: path.join(__dirname, "..", "assets", "logo.png")
-      }).show();
-    }
-    await memoStore.markDailyNotificationPushed(candidate.todayKey);
-  } catch (error) {
-    console.error("Failed to run memo reminder check", error);
-  } finally {
-    memoReminderRunning = false;
-  }
-}
-
-function startMemoReminderScheduler() {
-  if (memoReminderTimer) {
-    return;
-  }
-  setTimeout(runMemoReminderCheck, 1500);
-  memoReminderTimer = setInterval(runMemoReminderCheck, 60 * 1000);
-}
-
 app.whenReady().then(() => {
   configStore = new ConfigStore(app);
   smokeStore = new SmokeStore(configStore);
@@ -417,7 +439,6 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
   registerConfiguredShortcuts();
-  startMemoReminderScheduler();
 
   app.on("activate", () => {
     if (Date.now() - lastQuickMemoClosedAt < 1200) {
@@ -436,9 +457,5 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  if (memoReminderTimer) {
-    clearInterval(memoReminderTimer);
-    memoReminderTimer = null;
-  }
   globalShortcut.unregisterAll();
 });

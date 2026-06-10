@@ -3,9 +3,11 @@
 
   const bridgeApi = window.toolbox || window.api;
   const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
-  const api = bridgeApi || createMissingBridgeApi();
+  const api = createSafeBridgeApi(bridgeApi);
   const activeModuleStorageKey = "personalToolbox.activeModule";
+  const settingsTabStorageKey = "personalToolbox.settingsTab";
   const validModules = new Set(["dashboard", "memo", "smoke", "settings"]);
+  const validSettingsTabs = new Set(["general", "memo", "smoke"]);
 
   function createMissingBridgeApi() {
     const fail = async () => {
@@ -22,6 +24,7 @@
         list: fail,
         importRunPlan: fail,
         exportCurrentVersion: fail,
+        saveSettings: fail,
         createVersion: fail,
         updateVersion: fail,
         deleteVersion: fail,
@@ -44,9 +47,9 @@
         updateNote: fail,
         toggleNote: fail,
         deleteNote: fail,
-        getDailySettings: fail,
-        saveDailySettings: fail,
-        getDailyReport: fail,
+        importNotes: fail,
+        exportNotes: fail,
+        saveImportSample: fail,
         onChanged: () => () => {}
       },
       poem: {
@@ -55,9 +58,37 @@
     };
   }
 
+  function mergeModuleApi(fallbackModule, sourceModule) {
+    if (!sourceModule || typeof sourceModule !== "object") {
+      return fallbackModule;
+    }
+    return Object.keys(fallbackModule).reduce((merged, key) => {
+      merged[key] = typeof sourceModule[key] === "function" ? sourceModule[key] : fallbackModule[key];
+      return merged;
+    }, {});
+  }
+
+  function createSafeBridgeApi(sourceApi) {
+    const fallback = createMissingBridgeApi();
+    if (!sourceApi || typeof sourceApi !== "object") {
+      return fallback;
+    }
+    return {
+      config: mergeModuleApi(fallback.config, sourceApi.config),
+      smoke: mergeModuleApi(fallback.smoke, sourceApi.smoke),
+      memo: mergeModuleApi(fallback.memo, sourceApi.memo),
+      poem: mergeModuleApi(fallback.poem, sourceApi.poem)
+    };
+  }
+
   function readStoredActiveModule() {
     const stored = window.localStorage.getItem(activeModuleStorageKey);
     return validModules.has(stored) ? stored : "dashboard";
+  }
+
+  function readStoredSettingsTab() {
+    const stored = window.localStorage.getItem(settingsTabStorageKey);
+    return validSettingsTabs.has(stored) ? stored : "general";
   }
 
   const state = {
@@ -73,15 +104,13 @@
     sidebarCollapsed: window.localStorage.getItem("personalToolbox.sidebarCollapsed") !== "false",
     scenesPanelCollapsed: false,
     memoNotes: [],
-    memoSettings: null,
-    memoReport: null,
-    memoView: "list",
     memoSearch: "",
     selectedMemoId: "",
     memoDrawerOpen: false,
     dailyPoem: null,
     dailyPoemDateKey: "",
-    dailyPoemLoading: false
+    dailyPoemLoading: false,
+    settingsTab: readStoredSettingsTab()
   };
 
   const timers = new Map();
@@ -128,27 +157,32 @@
     casesList: $("casesList"),
     caseEditor: $("caseEditor"),
     memoSummary: $("memoSummary"),
-    memoListViewButton: $("memoListViewButton"),
-    memoDailyViewButton: $("memoDailyViewButton"),
     memoSearchLabel: $("memoSearchLabel"),
     memoSearchInput: $("memoSearchInput"),
     memoForm: $("memoForm"),
     memoInput: $("memoInput"),
     memoListView: $("memoListView"),
-    memoDailyView: $("memoDailyView"),
     memoList: $("memoList"),
     memoDrawerBackdrop: $("memoDrawerBackdrop"),
     memoDrawer: $("memoDrawer"),
-    dailyTitle: $("dailyTitle"),
-    dailySummary: $("dailySummary"),
-    dailyReportList: $("dailyReportList"),
-    dailyEnabledInput: $("dailyEnabledInput"),
-    dailyTimeInput: $("dailyTimeInput"),
+    settingsGeneralTab: $("settingsGeneralTab"),
+    settingsMemoTab: $("settingsMemoTab"),
+    settingsSmokeTab: $("settingsSmokeTab"),
     vaultPathInput: $("vaultPathInput"),
     saveVaultPathButton: $("saveVaultPathButton"),
     chooseVaultPathButton: $("chooseVaultPathButton"),
+    configDataPathText: $("configDataPathText"),
+    vaultRootPathText: $("vaultRootPathText"),
     smokeDataPathText: $("smokeDataPathText"),
+    smokeDataPathTextMirror: $("smokeDataPathTextMirror"),
+    smokeAutoWriteInput: $("smokeAutoWriteInput"),
+    saveSmokeSettingsButton: $("saveSmokeSettingsButton"),
+    smokeMarkdownFolderText: $("smokeMarkdownFolderText"),
     memoDataPathText: $("memoDataPathText"),
+    memoDataPathTextMirror: $("memoDataPathTextMirror"),
+    importMemoButton: $("importMemoButton"),
+    exportMemoButton: $("exportMemoButton"),
+    saveMemoSampleButton: $("saveMemoSampleButton"),
     quickMemoShortcutInput: $("quickMemoShortcutInput"),
     openMainShortcutInput: $("openMainShortcutInput"),
     saveQuickMemoShortcutButton: $("saveQuickMemoShortcutButton")
@@ -164,6 +198,20 @@
     }
     state.activeModule = moduleName;
     window.localStorage.setItem(activeModuleStorageKey, moduleName);
+  }
+
+  function setSettingsTab(tabName) {
+    if (!validSettingsTabs.has(tabName)) {
+      return;
+    }
+    state.settingsTab = tabName;
+    window.localStorage.setItem(settingsTabStorageKey, tabName);
+  }
+
+  function joinVaultPath(relativePath) {
+    const root = state.config && state.config.vaultPath ? state.config.vaultPath.replace(/\/+$/g, "") : "";
+    const relative = cleanText(relativePath).replace(/^\/+|\/+$/g, "");
+    return relative ? root + "/" + relative : root;
   }
 
   function createId(prefix) {
@@ -199,6 +247,18 @@
       summary.updatedCaseCount +
       "，跳过 " +
       summary.skippedCaseCount;
+  }
+
+  function formatMemoImportSummary(summary) {
+    if (!summary) {
+      return "导入完成";
+    }
+    return "导入完成：新增 " +
+      summary.createdCount +
+      "，更新 " +
+      summary.updatedCount +
+      "，跳过 " +
+      summary.skippedCount;
   }
 
   function formatTime(value) {
@@ -679,18 +739,12 @@
   }
 
   async function loadMemo() {
-    const [notes, settings, report] = await Promise.all([
-      api.memo.listNotes(),
-      api.memo.getDailySettings(),
-      api.memo.getDailyReport()
-    ]);
+    const notes = await api.memo.listNotes();
     state.memoNotes = notes;
     if (state.selectedMemoId && !state.memoNotes.some((note) => note.id === state.selectedMemoId)) {
       state.selectedMemoId = "";
       state.memoDrawerOpen = false;
     }
-    state.memoSettings = settings;
-    state.memoReport = report;
   }
 
   async function reloadAll() {
@@ -859,7 +913,6 @@
 
   function showMemoList() {
     setActiveModule("memo");
-    state.memoView = "list";
     renderShell();
     renderMemo();
   }
@@ -1645,12 +1698,7 @@
     await loadMemo();
     renderDashboardTodo();
     renderMemoShell();
-    if (state.memoView === "daily") {
-      state.memoReport = await api.memo.getDailyReport();
-      renderDailyView();
-    } else {
-      renderMemoListView();
-    }
+    renderMemoListView();
     setToast("已自动保存");
     return true;
   }
@@ -1709,20 +1757,13 @@
   function renderMemo() {
     renderDashboardTodo();
     renderMemoShell();
-    if (state.memoView === "daily") {
-      renderDailyView();
-    } else {
-      renderMemoListView();
-    }
+    renderMemoListView();
     renderMemoDrawer();
   }
 
   function renderMemoShell() {
-    refs.memoListView.classList.toggle("is-active", state.memoView === "list");
-    refs.memoDailyView.classList.toggle("is-active", state.memoView === "daily");
-    refs.memoListViewButton.classList.toggle("is-active", state.memoView === "list");
-    refs.memoDailyViewButton.classList.toggle("is-active", state.memoView === "daily");
-    refs.memoSearchLabel.hidden = state.memoView === "daily";
+    refs.memoListView.classList.add("is-active");
+    refs.memoSearchLabel.hidden = false;
     const todo = state.memoNotes.filter((note) => !note.completed).length;
     refs.memoSummary.textContent = "待办 " + todo + " · 完成 " + (state.memoNotes.length - todo);
   }
@@ -1800,13 +1841,6 @@
     time.dateTime = new Date(timeValue).toISOString();
     time.textContent = (note.completed ? "完成于 " : "更新于 ") + formatTime(timeValue);
     content.append(title, detail, time);
-
-    if (sourceView === "daily") {
-      const source = document.createElement("span");
-      source.className = "note-source";
-      source.textContent = "日报";
-      content.append(source);
-    }
 
     const actions = document.createElement("div");
     actions.className = "note-actions";
@@ -1929,34 +1963,32 @@
     return wrapper;
   }
 
-  function renderDailyView() {
-    const report = state.memoReport || { date: "", notes: [], todoCount: 0, doneCount: 0 };
-    const date = report.date ? new Date(report.date + "T00:00:00") : new Date();
-    refs.dailyTitle.textContent = new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date) + " 日报";
-    refs.dailySummary.textContent = report.notes.length
-      ? "昨天更新 " + report.notes.length + " 条 · 待办 " + report.todoCount + " · 完成 " + report.doneCount
-      : "昨天没有更新备忘";
-    refs.dailyEnabledInput.checked = Boolean(state.memoSettings && state.memoSettings.enabled);
-    refs.dailyTimeInput.value = state.memoSettings ? state.memoSettings.pushTime : "09:00";
-
-    refs.dailyReportList.replaceChildren();
-    if (!report.notes.length) {
-      refs.dailyReportList.append(createEmpty("昨天没有更新备忘"));
-      return;
-    }
-    refs.dailyReportList.append(
-      createMemoGroup("待办", report.notes.filter((note) => !note.completed), "daily"),
-      createMemoGroup("已完成", report.notes.filter((note) => note.completed), "daily")
-    );
-  }
-
   function renderSettings() {
     if (!state.config) {
       return;
     }
+    document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.settingsTab === state.settingsTab);
+    });
+    refs.settingsGeneralTab.classList.toggle("is-active", state.settingsTab === "general");
+    refs.settingsMemoTab.classList.toggle("is-active", state.settingsTab === "memo");
+    refs.settingsSmokeTab.classList.toggle("is-active", state.settingsTab === "smoke");
+
     refs.vaultPathInput.value = state.config.vaultPath;
-    refs.smokeDataPathText.textContent = state.config.vaultPath + "/.personal-toolbox/smoke.json";
-    refs.memoDataPathText.textContent = state.config.vaultPath + "/.personal-toolbox/memo.json";
+    refs.configDataPathText.textContent = state.config.configPath || "-";
+    refs.vaultRootPathText.textContent = state.config.vaultPath;
+    const smokeDataPath = state.config.vaultPath + "/.personal-toolbox/smoke.json";
+    const memoDataPath = state.config.vaultPath + "/.personal-toolbox/memo.json";
+    refs.smokeDataPathText.textContent = smokeDataPath;
+    refs.memoDataPathText.textContent = memoDataPath;
+    refs.smokeDataPathTextMirror.textContent = smokeDataPath;
+    refs.memoDataPathTextMirror.textContent = memoDataPath;
+
+    const smokeSettings = state.smoke && state.smoke.settings ? state.smoke.settings : {};
+    const smokeMarkdownFolder = smokeSettings.folder || "Smoke Tests";
+    refs.smokeAutoWriteInput.checked = smokeSettings.autoWriteNotes !== false;
+    refs.smokeMarkdownFolderText.textContent = joinVaultPath(smokeMarkdownFolder);
+
     const quickMemoShortcut = state.config.shortcuts && state.config.shortcuts.quickMemo ? state.config.shortcuts.quickMemo : "Alt+Q";
     const openMainShortcut = state.config.shortcuts && state.config.shortcuts.openMain ? state.config.shortcuts.openMain : "Alt+M";
     refs.quickMemoShortcutInput.dataset.accelerator = quickMemoShortcut;
@@ -1978,6 +2010,67 @@
     state.config = await api.config.setShortcuts({ quickMemo, openMain });
     renderSettings();
     setToast("快捷键已保存");
+  }
+
+  async function saveSmokeSettingsFromSettings() {
+    state.smoke = await api.smoke.saveSettings({
+      autoWriteNotes: refs.smokeAutoWriteInput.checked
+    });
+    renderSettings();
+    setToast("冒烟记录设置已保存");
+  }
+
+  async function importMemoNotes() {
+    refs.importMemoButton.disabled = true;
+    try {
+      const result = await api.memo.importNotes();
+      if (!result || result.canceled) {
+        setToast("已取消导入");
+        return;
+      }
+      await loadMemo();
+      renderAll();
+      setToast(formatMemoImportSummary(result));
+    } catch (error) {
+      console.error(error);
+      setToast("导入备忘录失败：" + error.message, true);
+    } finally {
+      refs.importMemoButton.disabled = false;
+    }
+  }
+
+  async function exportMemoNotes() {
+    refs.exportMemoButton.disabled = true;
+    try {
+      const result = await api.memo.exportNotes();
+      if (!result || result.canceled) {
+        setToast("已取消导出");
+        return;
+      }
+      setToast("导出完成：备忘 " + result.noteCount + " 条");
+    } catch (error) {
+      console.error(error);
+      setToast("导出备忘录失败：" + error.message, true);
+    } finally {
+      refs.exportMemoButton.disabled = false;
+    }
+  }
+
+  async function saveMemoImportSample() {
+    refs.saveMemoSampleButton.disabled = true;
+    try {
+      const result = await api.memo.saveImportSample();
+      if (!result || result.canceled) {
+        setToast("已取消保存样例");
+        return;
+      }
+      setToast("导入样例已保存");
+    } catch (error) {
+      console.error(error);
+      setToast("保存导入样例失败：" + error.message, true);
+    } finally {
+      refs.saveMemoSampleButton.disabled = false;
+    }
   }
 
   function bindShortcutInput(input) {
@@ -2007,6 +2100,12 @@
         }
         setActiveModule(button.dataset.module);
         renderShell();
+      });
+    });
+    document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        setSettingsTab(button.dataset.settingsTab);
+        renderSettings();
       });
     });
 
@@ -2165,15 +2264,6 @@
       }
     });
 
-    refs.memoListViewButton.addEventListener("click", () => {
-      state.memoView = "list";
-      renderMemo();
-    });
-    refs.memoDailyViewButton.addEventListener("click", async () => {
-      state.memoView = "daily";
-      state.memoReport = await api.memo.getDailyReport();
-      renderMemo();
-    });
     refs.memoSearchInput.addEventListener("input", () => {
       state.memoSearch = refs.memoSearchInput.value;
       renderMemo();
@@ -2190,8 +2280,6 @@
     });
     refs.memoInput.addEventListener("blur", () => createMemoFromComposer(false));
     refs.memoDrawerBackdrop.addEventListener("click", closeMemoDrawer);
-    refs.dailyEnabledInput.addEventListener("change", saveDailySettingsFromForm);
-    refs.dailyTimeInput.addEventListener("change", saveDailySettingsFromForm);
 
     refs.saveVaultPathButton.addEventListener("click", async () => {
       await saveVaultPath(refs.vaultPathInput.value);
@@ -2201,6 +2289,17 @@
       await Promise.all([loadSmoke(), loadMemo()]);
       renderAll();
       setToast("Vault 已切换");
+    });
+    refs.importMemoButton.addEventListener("click", importMemoNotes);
+    refs.exportMemoButton.addEventListener("click", exportMemoNotes);
+    refs.saveMemoSampleButton.addEventListener("click", saveMemoImportSample);
+    refs.saveSmokeSettingsButton.addEventListener("click", async () => {
+      try {
+        await saveSmokeSettingsFromSettings();
+      } catch (error) {
+        console.error(error);
+        setToast("冒烟记录设置保存失败：" + error.message, true);
+      }
     });
 
     bindShortcutInput(refs.quickMemoShortcutInput);
@@ -2217,15 +2316,6 @@
     if (api.memo.onChanged) {
       api.memo.onChanged(refreshMemoFromExternalChange);
     }
-  }
-
-  async function saveDailySettingsFromForm() {
-    state.memoSettings = await api.memo.saveDailySettings({
-      enabled: refs.dailyEnabledInput.checked,
-      pushTime: refs.dailyTimeInput.value || "09:00"
-    });
-    renderMemo();
-    setToast("日报设置已保存");
   }
 
   bindEvents();

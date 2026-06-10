@@ -135,10 +135,6 @@
               <p id="memoSummary">读取中</p>
             </div>
             <div class="module-actions">
-              <div class="segmented">
-                <button id="memoListViewButton" class="is-active" type="button">备忘</button>
-                <button id="memoDailyViewButton" type="button">日报</button>
-              </div>
               <label id="memoSearchLabel" class="search-box">
                 <span>搜索</span>
                 <input id="memoSearchInput" type="search" placeholder="搜索备忘" autocomplete="off" />
@@ -152,66 +148,127 @@
             </form>
             <div id="memoList" class="memo-list"></div>
           </section>
-
-          <section id="memoDailyView" class="memo-view">
-            <div class="daily-toolbar panel">
-              <div>
-                <h3 id="dailyTitle">昨日报</h3>
-                <p id="dailySummary">0 条</p>
-              </div>
-              <div class="daily-settings">
-                <label>
-                  <input id="dailyEnabledInput" type="checkbox" />
-                  <span>提醒</span>
-                </label>
-                <input id="dailyTimeInput" type="time" />
-              </div>
-            </div>
-            <div id="dailyReportList" class="memo-list"></div>
-          </section>
         </section>
 
         <section id="settingsModule" class="module" aria-label="设置">
           <header class="module-head">
             <div>
               <h2>设置</h2>
-              <p>Obsidian Vault 与本地数据路径</p>
+              <p>常规、备忘录、冒烟记录</p>
             </div>
           </header>
-          <section class="settings-card panel">
-            <label class="field">
-              <span>Obsidian Vault</span>
-              <input id="vaultPathInput" type="text" autocomplete="off" />
-            </label>
-            <div class="inline-actions">
-              <button id="saveVaultPathButton" class="primary" type="button">保存路径</button>
-              <button id="chooseVaultPathButton" type="button">选择目录</button>
+          <div class="settings-layout">
+            <nav class="settings-tabs" role="tablist" aria-label="设置分类">
+              <button class="is-active" type="button" data-settings-tab="general">常规</button>
+              <button type="button" data-settings-tab="memo">备忘录</button>
+              <button type="button" data-settings-tab="smoke">冒烟记录</button>
+            </nav>
+
+            <div class="settings-content">
+              <section id="settingsGeneralTab" class="settings-pane is-active">
+                <section class="settings-card panel">
+                  <label class="field">
+                    <span>数据根目录</span>
+                    <input id="vaultPathInput" type="text" autocomplete="off" />
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveVaultPathButton" class="primary" type="button">保存路径</button>
+                    <button id="chooseVaultPathButton" type="button">选择目录</button>
+                  </div>
+                  <dl class="path-list">
+                    <div>
+                      <dt>配置文件</dt>
+                      <dd id="configDataPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>数据根目录</dt>
+                      <dd id="vaultRootPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>备忘数据</dt>
+                      <dd id="memoDataPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>冒烟数据</dt>
+                      <dd id="smokeDataPathText">-</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section class="settings-card panel">
+                  <label class="field">
+                    <span>极速备忘</span>
+                    <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>打开主窗口</span>
+                    <input id="openMainShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
+                  </div>
+                  <p class="setting-help">点击输入框后按下组合键。极速备忘弹出独立输入框；打开主窗口会唤起完整 App。</p>
+                </section>
+              </section>
+
+              <section id="settingsMemoTab" class="settings-pane">
+                <section class="settings-card panel">
+                  <div class="inline-actions">
+                    <button id="importMemoButton" type="button">导入备忘录</button>
+                    <button id="exportMemoButton" type="button">导出备忘录</button>
+                    <button id="saveMemoSampleButton" type="button">保存导入样例</button>
+                  </div>
+                  <dl class="path-list">
+                    <div>
+                      <dt>备忘数据</dt>
+                      <dd id="memoDataPathTextMirror">-</dd>
+                    </div>
+                  </dl>
+                  <div class="import-sample">
+                    <div>
+                      <strong>导入格式样例</strong>
+                      <p>JSON 文件；同 id 更新，没有 id 会创建新备忘。</p>
+                    </div>
+                    <pre>{
+  "schemaVersion": 1,
+  "notes": [
+    {
+      "title": "跟进双边履约冒烟结果",
+      "detail": "补充失败 case 的复现路径和截图。",
+      "completed": false,
+      "createdAt": "2026-06-10T09:00:00.000+08:00",
+      "updatedAt": "2026-06-10T09:20:00.000+08:00",
+      "completedAt": null
+    }
+  ]
+}</pre>
+                  </div>
+                </section>
+              </section>
+
+              <section id="settingsSmokeTab" class="settings-pane">
+                <section class="settings-card panel">
+                  <label class="checkbox-field">
+                    <input id="smokeAutoWriteInput" type="checkbox" />
+                    <span>保存 Case 时同步生成 Markdown</span>
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveSmokeSettingsButton" class="primary" type="button">保存冒烟设置</button>
+                  </div>
+                  <dl class="path-list">
+                    <div>
+                      <dt>冒烟数据</dt>
+                      <dd id="smokeDataPathTextMirror">-</dd>
+                    </div>
+                    <div>
+                      <dt>冒烟 Markdown</dt>
+                      <dd id="smokeMarkdownFolderText">-</dd>
+                    </div>
+                  </dl>
+                  <p class="setting-help">备忘数据和冒烟数据都跟随常规里的数据根目录。Markdown 也写入这个根目录下。</p>
+                </section>
+              </section>
             </div>
-            <dl class="path-list">
-              <div>
-                <dt>冒烟数据</dt>
-                <dd id="smokeDataPathText">-</dd>
-              </div>
-              <div>
-                <dt>备忘数据</dt>
-                <dd id="memoDataPathText">-</dd>
-              </div>
-            </dl>
-          </section>
-          <section class="settings-card panel">
-            <label class="field">
-              <span>极速备忘</span>
-              <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
-            </label>
-            <label class="field">
-              <span>打开主窗口</span>
-              <input id="openMainShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
-            </label>
-            <div class="inline-actions">
-              <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
-            </div>
-            <p class="setting-help">点击输入框后按下组合键。极速备忘弹出独立输入框；打开主窗口会唤起完整 App。</p>
-          </section>
+          </div>
         </section>
       </main>
     </div>

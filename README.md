@@ -14,8 +14,8 @@
   - 快速新增待办
   - 支持标题和详情字段
   - 支持完成、恢复、删除
+  - 支持 JSON 导入和导出
   - 支持极速备忘浮窗和自定义快捷键
-  - 按天生成 Markdown 日报
 - 主面板
   - 当前时间
   - 今日待办数量
@@ -23,14 +23,13 @@
 
 ## 数据存储
 
-应用会连接一个本地目录作为 Vault。首次启动默认使用应用私有目录：
-`~/Library/Application Support/个人工具箱/Vault`。可以在应用设置中修改 Vault 路径，例如切换到自己的 Obsidian Vault。
+应用会连接一个本地目录作为数据根目录。首次启动默认使用应用私有目录：
+`~/Library/Application Support/个人工具箱/Vault`。可以在应用设置中修改该目录，备忘数据和冒烟数据都会跟随这个根目录。
 
 数据文件写入 Vault 内：
 
 - 冒烟记录：`.personal-toolbox/smoke.json`
 - 每日备忘：`.personal-toolbox/memo.json`
-- 每日备忘 Markdown：`Daily Memos/YYYY-MM-DD.md`
 - 冒烟 Case Markdown：`Smoke Tests/<版本>/<场景>/<Case>.md`
 
 这些本地数据目录不会提交到仓库。
@@ -56,6 +55,26 @@ npm run dist
 ```
 
 DMG 会输出到 `dist/`。
+
+## 备忘录导入格式
+
+导入文件使用 JSON。`notes` 为必填数组；同 `id` 会更新已有备忘，没有 `id` 会创建新备忘。
+
+```json
+{
+  "schemaVersion": 1,
+  "notes": [
+    {
+      "title": "跟进双边履约冒烟结果",
+      "detail": "补充失败 case 的复现路径和截图。",
+      "completed": false,
+      "createdAt": "2026-06-10T09:00:00.000+08:00",
+      "updatedAt": "2026-06-10T09:20:00.000+08:00",
+      "completedAt": null
+    }
+  ]
+}
+```
 
 ## 开源说明
 

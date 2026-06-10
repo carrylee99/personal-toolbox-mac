@@ -2,51 +2,10 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const NOTE_PREFIX = "memo/note/";
-const DEFAULT_MARKDOWN_FOLDER = "Daily Memos";
-const DEFAULT_DAILY_SETTINGS = {
-  enabled: true,
-  pushTime: "09:00",
-  lastPushedDate: null,
-  markdownFolder: DEFAULT_MARKDOWN_FOLDER
-};
+const EXPORT_SCHEMA_VERSION = 1;
 
 function createId(prefix) {
   return prefix + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-}
-
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
-function getLocalDateKey(date) {
-  return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
-}
-
-function parseDateKey(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) {
-    return null;
-  }
-  const parts = String(value).split("-").map(Number);
-  const date = new Date(parts[0], parts[1] - 1, parts[2]);
-  return getLocalDateKey(date) === value ? date : null;
-}
-
-function getYesterdayDateKey(now) {
-  const base = now || new Date();
-  return getLocalDateKey(new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1));
-}
-
-function getDayRange(dateKey) {
-  const startDate = parseDateKey(dateKey) || parseDateKey(getYesterdayDateKey());
-  const endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1);
-  return {
-    start: startDate.getTime(),
-    end: endDate.getTime()
-  };
-}
-
-function isValidTime(value) {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
 }
 
 function cleanText(value) {
@@ -72,6 +31,23 @@ function buildMemoContent(title, detail) {
   return [cleanText(title), normalizeDetail(detail)].filter(Boolean).join("\n");
 }
 
+function parseTimestamp(value, fallback) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
 function normalizeNotePayload(value) {
   if (typeof value === "string") {
     return splitMemoContent(value);
@@ -86,166 +62,71 @@ function normalizeNotePayload(value) {
   return splitMemoContent(payload.content);
 }
 
-function normalizeFolder(value) {
-  const normalized = cleanText(value)
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "")
-    .split("/")
-    .map((part) => part.replace(/[\\/:*?"<>|#[\]^]/g, "-").trim())
-    .filter(Boolean)
-    .join("/");
-  return normalized || DEFAULT_MARKDOWN_FOLDER;
-}
-
 function normalizeNote(note) {
   const now = Date.now();
   const payload = normalizeNotePayload(note || {});
   const fallback = splitMemoContent(note && note.content);
   const title = payload.title || fallback.title;
   const detail = Object.prototype.hasOwnProperty.call(note || {}, "detail") ? payload.detail : fallback.detail;
+  const createdAt = parseTimestamp(note && note.createdAt, now);
+  const updatedAt = parseTimestamp(note && note.updatedAt, createdAt);
   return {
     id: note && note.id ? String(note.id) : note && note._id ? String(note._id) : createId(NOTE_PREFIX),
     title,
     detail,
     content: buildMemoContent(title, detail),
-    createdAt: Number((note && note.createdAt) || now),
-    updatedAt: Number((note && note.updatedAt) || (note && note.createdAt) || now),
+    createdAt,
+    updatedAt,
     completed: Boolean(note && note.completed),
-    completedAt: note && note.completedAt ? Number(note.completedAt) : null
-  };
-}
-
-function normalizeDailySettings(settings) {
-  return {
-    enabled: typeof (settings && settings.enabled) === "boolean" ? settings.enabled : DEFAULT_DAILY_SETTINGS.enabled,
-    pushTime: isValidTime(settings && settings.pushTime) ? settings.pushTime : DEFAULT_DAILY_SETTINGS.pushTime,
-    lastPushedDate: parseDateKey(settings && settings.lastPushedDate) ? settings.lastPushedDate : DEFAULT_DAILY_SETTINGS.lastPushedDate,
-    markdownFolder: normalizeFolder(settings && settings.markdownFolder)
+    completedAt: note && note.completedAt ? parseTimestamp(note.completedAt, null) : null
   };
 }
 
 function normalizeStore(raw) {
   const store = raw || {};
   return {
-    settings: normalizeDailySettings(store.settings || {}),
     notes: Array.isArray(store.notes) ? store.notes.map(normalizeNote) : []
   };
 }
 
-function sortNotes(notes) {
-  return notes.slice().sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function buildDailyReportFromNotes(dateKey, sourceNotes) {
-  const reportDate = parseDateKey(dateKey) ? dateKey : getYesterdayDateKey();
-  const range = getDayRange(reportDate);
-  const notes = sortNotes(sourceNotes.filter((note) => note.updatedAt >= range.start && note.updatedAt < range.end));
-  const todoCount = notes.filter((note) => !note.completed).length;
+function getImportNotesPayload(raw) {
+  if (Array.isArray(raw)) {
+    return {
+      notes: raw
+    };
+  }
   return {
-    date: reportDate,
-    notes,
-    todoCount,
-    doneCount: notes.length - todoCount
+    notes: Array.isArray(raw && raw.notes) ? raw.notes : []
   };
 }
 
-function formatTime(timestamp) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(timestamp));
+function getMemoImportSample() {
+  return JSON.stringify({
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    exportedAt: "2026-06-10T09:00:00.000+08:00",
+    notes: [
+      {
+        title: "跟进双边履约冒烟结果",
+        detail: "补充失败 case 的复现路径和截图。",
+        completed: false,
+        createdAt: "2026-06-10T09:00:00.000+08:00",
+        updatedAt: "2026-06-10T09:20:00.000+08:00",
+        completedAt: null
+      },
+      {
+        title: "整理今日待办",
+        detail: "导入时没有 id 会自动创建；有 id 会按 id 更新已有备忘。",
+        completed: true,
+        createdAt: "2026-06-10T08:30:00.000+08:00",
+        updatedAt: "2026-06-10T10:00:00.000+08:00",
+        completedAt: "2026-06-10T10:00:00.000+08:00"
+      }
+    ]
+  }, null, 2) + "\n";
 }
 
-function formatDateTitle(dateKey) {
-  const date = parseDateKey(dateKey) || new Date();
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
-}
-
-function compactContent(value, maxLength) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength ? normalized.slice(0, maxLength - 1) + "..." : normalized;
-}
-
-function markdownNoteLine(note) {
-  const marker = note.completed ? "x" : " ";
-  const title = cleanText(note.title || splitMemoContent(note.content).title) || "未填写";
-  const detail = normalizeDetail(note.detail || splitMemoContent(note.content).detail)
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const lines = ["- [" + marker + "] " + title + "  "];
-  lines.push("  - 更新：" + formatTime(note.updatedAt));
-  if (note.completed && note.completedAt) {
-    lines.push("  - 完成：" + formatTime(note.completedAt));
-  }
-  detail.forEach((line) => {
-    lines.push("  - " + line);
-  });
-  return lines.join("\n");
-}
-
-function buildDailyMemoMarkdown(dateKey, notes) {
-  const report = buildDailyReportFromNotes(dateKey, notes);
-  const todoNotes = report.notes.filter((note) => !note.completed);
-  const doneNotes = report.notes.filter((note) => note.completed);
-  const lines = [
-    "---",
-    "type: daily-memo",
-    "date: " + JSON.stringify(report.date),
-    "updated: " + JSON.stringify(new Date().toISOString()),
-    "total: " + report.notes.length,
-    "todo: " + report.todoCount,
-    "done: " + report.doneCount,
-    "---",
-    "",
-    "# " + formatDateTitle(report.date) + " 备忘",
-    "",
-    "## 摘要",
-    "",
-    "- 更新：" + report.notes.length + " 条",
-    "- 待办：" + report.todoCount + " 条",
-    "- 完成：" + report.doneCount + " 条",
-    "",
-    "## 待办",
-    ""
-  ];
-
-  if (todoNotes.length) {
-    lines.push(...todoNotes.map(markdownNoteLine));
-  } else {
-    lines.push("> 暂无待办。");
-  }
-
-  lines.push("", "## 已完成", "");
-  if (doneNotes.length) {
-    lines.push(...doneNotes.map(markdownNoteLine));
-  } else {
-    lines.push("> 暂无已完成。");
-  }
-
-  return lines.join("\n") + "\n";
-}
-
-function buildDailyNotificationBody(report) {
-  const preview = report.notes
-    .slice(0, 3)
-    .map((note) => compactContent(note.title || note.content, 18))
-    .filter(Boolean)
-    .join("、");
-  const suffix = report.notes.length > 3 ? " 等" : "";
-  return "昨天更新了 " + report.notes.length + " 条备忘" + (preview ? "：" + preview + suffix : "");
-}
-
-function isAtOrAfterPushTime(pushTime, now) {
-  const parts = String(pushTime || DEFAULT_DAILY_SETTINGS.pushTime).split(":").map(Number);
-  return now.getHours() * 60 + now.getMinutes() >= parts[0] * 60 + parts[1];
+function sortNotes(notes) {
+  return notes.slice().sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 class MemoStore {
@@ -308,7 +189,6 @@ class MemoStore {
     });
     store.notes.push(note);
     await this.saveStore(store);
-    await this.writeDailyMemo(getLocalDateKey(new Date(note.updatedAt)));
     return note;
   }
 
@@ -318,17 +198,11 @@ class MemoStore {
     if (!note) {
       throw new Error("Note not found");
     }
-    const oldDateKey = getLocalDateKey(new Date(note.updatedAt));
     const now = Date.now();
     note.completed = Boolean(completed);
     note.completedAt = note.completed ? now : null;
     note.updatedAt = now;
-    const newDateKey = getLocalDateKey(new Date(note.updatedAt));
     await this.saveStore(store);
-    await this.writeDailyMemo(oldDateKey);
-    if (newDateKey !== oldDateKey) {
-      await this.writeDailyMemo(newDateKey);
-    }
     return normalizeNote(note);
   }
 
@@ -348,17 +222,11 @@ class MemoStore {
     if (!payload.title) {
       throw new Error("Note title is empty");
     }
-    const oldDateKey = getLocalDateKey(new Date(note.updatedAt));
     note.title = payload.title;
     note.detail = payload.detail;
     note.content = buildMemoContent(note.title, note.detail);
     note.updatedAt = Date.now();
-    const newDateKey = getLocalDateKey(new Date(note.updatedAt));
     await this.saveStore(store);
-    await this.writeDailyMemo(oldDateKey);
-    if (newDateKey !== oldDateKey) {
-      await this.writeDailyMemo(newDateKey);
-    }
     return normalizeNote(note);
   }
 
@@ -368,72 +236,71 @@ class MemoStore {
     if (!note) {
       return;
     }
-    const dateKey = getLocalDateKey(new Date(note.updatedAt));
     store.notes = store.notes.filter((item) => item.id !== id);
     await this.saveStore(store);
-    await this.writeDailyMemo(dateKey);
   }
 
-  async getDailyReportSettings() {
+  async importNotes(filePath) {
+    const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
+    const payload = getImportNotesPayload(raw);
     const store = await this.readStore();
-    return store.settings;
-  }
+    const existingById = new Map(store.notes.map((note) => [note.id, note]));
+    let createdCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
 
-  async saveDailyReportSettings(settings) {
-    const store = await this.readStore();
-    const patch = settings || {};
-    store.settings = normalizeDailySettings({
-      enabled: typeof patch.enabled === "boolean" ? patch.enabled : store.settings.enabled,
-      pushTime: patch.pushTime || store.settings.pushTime,
-      lastPushedDate: Object.prototype.hasOwnProperty.call(patch, "lastPushedDate") ? patch.lastPushedDate : store.settings.lastPushedDate,
-      markdownFolder: patch.markdownFolder || store.settings.markdownFolder
+    payload.notes.forEach((item) => {
+      const note = normalizeNote(item);
+      if (!cleanText(note.title)) {
+        skippedCount += 1;
+        return;
+      }
+      const existing = existingById.get(note.id);
+      if (existing) {
+        Object.assign(existing, note);
+        updatedCount += 1;
+      } else {
+        store.notes.push(note);
+        existingById.set(note.id, note);
+        createdCount += 1;
+      }
     });
-    const next = await this.saveStore(store);
-    return next.settings;
-  }
 
-  async getDailyReport(dateKey) {
-    const store = await this.readStore();
-    return buildDailyReportFromNotes(dateKey || getYesterdayDateKey(), store.notes);
-  }
+    await this.saveStore(store);
 
-  async getNotificationCandidate(now) {
-    const store = await this.readStore();
-    const current = now || new Date();
-    const todayKey = getLocalDateKey(current);
-    if (!store.settings.enabled || store.settings.lastPushedDate === todayKey || !isAtOrAfterPushTime(store.settings.pushTime, current)) {
-      return null;
-    }
-    const report = buildDailyReportFromNotes(getYesterdayDateKey(current), store.notes);
-    if (report.notes.length === 0) {
-      return null;
-    }
     return {
-      todayKey,
-      report,
-      title: "昨日报",
-      body: buildDailyNotificationBody(report)
+      createdCount,
+      updatedCount,
+      skippedCount,
+      totalCount: store.notes.length
     };
   }
 
-  async markDailyNotificationPushed(dateKey) {
-    return this.saveDailyReportSettings({ lastPushedDate: dateKey });
+  async exportNotes(filePath) {
+    const store = await this.readStore();
+    const payload = {
+      schemaVersion: EXPORT_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      notes: sortNotes(store.notes)
+    };
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+    return {
+      filePath,
+      noteCount: store.notes.length
+    };
   }
 
-  async writeDailyMemo(dateKey) {
-    const store = await this.readStore();
-    const vaultPath = await this.configStore.getVaultPath();
-    const folder = normalizeFolder(store.settings.markdownFolder);
-    const targetPath = path.join(vaultPath, folder, dateKey + ".md");
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(targetPath, buildDailyMemoMarkdown(dateKey, store.notes), "utf8");
+  async writeImportSample(filePath) {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, getMemoImportSample(), "utf8");
+    return {
+      filePath
+    };
   }
 }
 
 module.exports = {
   MemoStore,
-  DEFAULT_DAILY_SETTINGS,
-  buildDailyReportFromNotes,
-  getYesterdayDateKey,
-  getLocalDateKey
+  getMemoImportSample
 };

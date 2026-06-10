@@ -11,6 +11,7 @@ const toolboxApi = {
     list: () => ipcRenderer.invoke("smoke:list"),
     importRunPlan: () => ipcRenderer.invoke("smoke:importRunPlan"),
     exportCurrentVersion: () => ipcRenderer.invoke("smoke:exportCurrentVersion"),
+    saveSettings: (settings) => ipcRenderer.invoke("smoke:saveSettings", settings),
     createVersion: (payload) => ipcRenderer.invoke("smoke:createVersion", payload),
     updateVersion: (versionId, patch) => ipcRenderer.invoke("smoke:updateVersion", versionId, patch),
     deleteVersion: (versionId) => ipcRenderer.invoke("smoke:deleteVersion", versionId),
@@ -33,9 +34,9 @@ const toolboxApi = {
     updateNote: (noteId, content) => ipcRenderer.invoke("memo:updateNote", noteId, content),
     toggleNote: (noteId, completed) => ipcRenderer.invoke("memo:toggleNote", noteId, completed),
     deleteNote: (noteId) => ipcRenderer.invoke("memo:deleteNote", noteId),
-    getDailySettings: () => ipcRenderer.invoke("memo:getDailySettings"),
-    saveDailySettings: (settings) => ipcRenderer.invoke("memo:saveDailySettings", settings),
-    getDailyReport: (dateKey) => ipcRenderer.invoke("memo:getDailyReport", dateKey),
+    importNotes: () => ipcRenderer.invoke("memo:importNotes"),
+    exportNotes: () => ipcRenderer.invoke("memo:exportNotes"),
+    saveImportSample: () => ipcRenderer.invoke("memo:saveImportSample"),
     onChanged: (callback) => {
       const listener = () => callback();
       ipcRenderer.on("memo:changed", listener);

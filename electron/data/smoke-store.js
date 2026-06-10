@@ -1246,6 +1246,17 @@ class SmokeStore {
     return this.readStore();
   }
 
+  async saveSettings(patch) {
+    const store = await this.readStore();
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "folder")) {
+      store.settings.folder = normalizeFolder(patch.folder);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "autoWriteNotes")) {
+      store.settings.autoWriteNotes = patch.autoWriteNotes !== false;
+    }
+    return this.saveStore(store);
+  }
+
   async createVersion(payload) {
     const store = await this.readStore();
     const name = cleanText(payload && payload.name) || "新版本";

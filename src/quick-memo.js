@@ -3,7 +3,7 @@
 
   const bridgeApi = window.toolbox || window.api;
   const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
-  const api = bridgeApi || {
+  const fallbackApi = {
     memo: {
       createNote: async () => {
         throw new Error(bridgeUnavailableMessage);
@@ -14,6 +14,19 @@
       setSaving: async () => {},
       onFocus: () => () => {}
     }
+  };
+  function mergeModuleApi(fallbackModule, sourceModule) {
+    if (!sourceModule || typeof sourceModule !== "object") {
+      return fallbackModule;
+    }
+    return Object.keys(fallbackModule).reduce((merged, key) => {
+      merged[key] = typeof sourceModule[key] === "function" ? sourceModule[key] : fallbackModule[key];
+      return merged;
+    }, {});
+  }
+  const api = {
+    memo: mergeModuleApi(fallbackApi.memo, bridgeApi && bridgeApi.memo),
+    quickMemo: mergeModuleApi(fallbackApi.quickMemo, bridgeApi && bridgeApi.quickMemo)
   };
   const form = document.getElementById("quickMemoForm");
   const input = document.getElementById("quickMemoInput");
