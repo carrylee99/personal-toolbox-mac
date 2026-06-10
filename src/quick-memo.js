@@ -1,9 +1,13 @@
 (function () {
   "use strict";
 
-  const api = window.toolbox || {
+  const bridgeApi = window.toolbox || window.api;
+  const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
+  const api = bridgeApi || {
     memo: {
-      createNote: async () => {}
+      createNote: async () => {
+        throw new Error(bridgeUnavailableMessage);
+      }
     },
     quickMemo: {
       close: async () => {},

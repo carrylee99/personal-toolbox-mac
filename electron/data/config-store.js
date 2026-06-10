@@ -2,7 +2,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const DEFAULT_VAULT_PATH = path.join(os.homedir(), "Documents");
+const LEGACY_DEFAULT_VAULT_PATH = path.join(os.homedir(), "Documents");
 const DEFAULT_SHORTCUTS = {
   quickMemo: "Alt+Q",
   openMain: "Alt+M"
@@ -14,6 +14,10 @@ class ConfigStore {
     this.configPath = path.join(app.getPath("userData"), "config.json");
   }
 
+  getDefaultVaultPath() {
+    return path.join(this.app.getPath("userData"), "Vault");
+  }
+
   async readConfig() {
     try {
       const raw = await fs.readFile(this.configPath, "utf8");
@@ -23,6 +27,7 @@ class ConfigStore {
         console.warn("Failed to read config, using defaults", error);
       }
       const config = this.normalizeConfig({});
+      await fs.mkdir(config.vaultPath, { recursive: true });
       await this.writeConfig(config);
       return config;
     }
@@ -39,7 +44,7 @@ class ConfigStore {
     return {
       vaultPath: typeof (config && config.vaultPath) === "string" && config.vaultPath.trim()
         ? config.vaultPath.trim()
-        : DEFAULT_VAULT_PATH,
+        : this.getDefaultVaultPath(),
       shortcuts: Object.assign({}, DEFAULT_SHORTCUTS, this.normalizeShortcuts(config && config.shortcuts))
     };
   }
@@ -89,6 +94,6 @@ class ConfigStore {
 
 module.exports = {
   ConfigStore,
-  DEFAULT_VAULT_PATH,
+  LEGACY_DEFAULT_VAULT_PATH,
   DEFAULT_SHORTCUTS
 };

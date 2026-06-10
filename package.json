@@ -1,6 +1,6 @@
 {
   "name": "personal-toolbox-mac",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "个人工具箱 Mac App",
   "main": "electron/main.js",
   "author": "carrylee99",

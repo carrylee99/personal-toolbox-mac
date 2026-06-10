@@ -1,9 +1,59 @@
 (function () {
   "use strict";
 
-  const api = window.toolbox;
+  const bridgeApi = window.toolbox || window.api;
+  const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
+  const api = bridgeApi || createMissingBridgeApi();
   const activeModuleStorageKey = "personalToolbox.activeModule";
   const validModules = new Set(["dashboard", "memo", "smoke", "settings"]);
+
+  function createMissingBridgeApi() {
+    const fail = async () => {
+      throw new Error(bridgeUnavailableMessage);
+    };
+    return {
+      config: {
+        get: fail,
+        setVaultPath: fail,
+        setShortcuts: fail,
+        selectVaultPath: fail
+      },
+      smoke: {
+        list: fail,
+        importRunPlan: fail,
+        exportCurrentVersion: fail,
+        createVersion: fail,
+        updateVersion: fail,
+        deleteVersion: fail,
+        selectVersion: fail,
+        createScene: fail,
+        updateScene: fail,
+        deleteScene: fail,
+        deleteScenes: fail,
+        createCase: fail,
+        updateCase: fail,
+        duplicateCase: fail,
+        deleteCase: fail,
+        deleteCases: fail,
+        selectScene: fail,
+        selectCase: fail
+      },
+      memo: {
+        listNotes: fail,
+        createNote: fail,
+        updateNote: fail,
+        toggleNote: fail,
+        deleteNote: fail,
+        getDailySettings: fail,
+        saveDailySettings: fail,
+        getDailyReport: fail,
+        onChanged: () => () => {}
+      },
+      poem: {
+        getDaily: fail
+      }
+    };
+  }
 
   function readStoredActiveModule() {
     const stored = window.localStorage.getItem(activeModuleStorageKey);
@@ -650,6 +700,9 @@
       renderAll();
     } catch (error) {
       console.error(error);
+      if (!bridgeApi) {
+        refs.vaultLabel.textContent = "应用桥接未加载";
+      }
       setToast("读取数据失败：" + error.message, true);
     }
   }

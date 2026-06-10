@@ -23,7 +23,8 @@
 
 ## 数据存储
 
-应用会连接一个本地目录作为 Vault，默认是当前用户的 `~/Documents`。可以在应用设置中修改 Vault 路径。
+应用会连接一个本地目录作为 Vault。首次启动默认使用应用私有目录：
+`~/Library/Application Support/个人工具箱/Vault`。可以在应用设置中修改 Vault 路径，例如切换到自己的 Obsidian Vault。
 
 数据文件写入 Vault 内：
 

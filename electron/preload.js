@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("toolbox", {
+const toolboxApi = {
   config: {
     get: () => ipcRenderer.invoke("config:get"),
     setVaultPath: (vaultPath) => ipcRenderer.invoke("config:setVaultPath", vaultPath),
@@ -54,4 +54,7 @@ contextBridge.exposeInMainWorld("toolbox", {
       return () => ipcRenderer.removeListener("quickMemo:focus", listener);
     }
   }
-});
+};
+
+contextBridge.exposeInMainWorld("toolbox", toolboxApi);
+contextBridge.exposeInMainWorld("api", toolboxApi);
