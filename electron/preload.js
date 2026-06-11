@@ -5,6 +5,7 @@ const toolboxApi = {
     get: () => ipcRenderer.invoke("config:get"),
     setVaultPath: (vaultPath) => ipcRenderer.invoke("config:setVaultPath", vaultPath),
     setShortcuts: (shortcuts) => ipcRenderer.invoke("config:setShortcuts", shortcuts),
+    setTheme: (theme) => ipcRenderer.invoke("config:setTheme", theme),
     selectVaultPath: () => ipcRenderer.invoke("config:selectVaultPath")
   },
   smoke: {

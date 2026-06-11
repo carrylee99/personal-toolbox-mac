@@ -1,5 +1,5 @@
 :root {
-  color: #101828;
+  color: #18231d;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
 }
@@ -24,14 +24,14 @@ body {
   width: calc(100vw - 16px);
   height: calc(100vh - 16px);
   margin: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 22px;
   padding: 16px 18px 14px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(245, 248, 255, 0.66)),
-    rgba(255, 255, 255, 0.58);
+    linear-gradient(135deg, rgba(255, 254, 250, 0.86), rgba(237, 247, 237, 0.7)),
+    rgba(255, 254, 250, 0.58);
   box-shadow:
-    0 24px 60px rgba(15, 23, 42, 0.2),
+    0 24px 60px rgba(24, 35, 29, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(26px) saturate(150%);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
@@ -54,7 +54,7 @@ body {
 
 .quick-slogan {
   overflow: hidden;
-  color: rgba(16, 24, 40, 0.68);
+  color: rgba(24, 35, 29, 0.68);
   font-size: 13px;
   font-weight: 750;
   line-height: 1.2;
@@ -70,7 +70,7 @@ textarea {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #101828;
+  color: #18231d;
   font: inherit;
   font-size: 18px;
   font-weight: 650;
@@ -90,16 +90,50 @@ textarea:disabled {
 .quick-status {
   min-height: 15px;
   margin: 0;
-  color: rgba(102, 112, 133, 0.9);
+  color: rgba(104, 118, 110, 0.9);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
 }
 
 .quick-form.is-saving .quick-status {
-  color: #2563eb;
+  color: #2f8f6b;
 }
 
 .quick-form.is-error .quick-status {
+  color: #ba3b34;
+}
+
+:root[data-theme="classic"] {
+  color: #101828;
+}
+
+:root[data-theme="classic"] .quick-shell {
+  border-color: rgba(255, 255, 255, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(245, 248, 255, 0.66)),
+    rgba(255, 255, 255, 0.58);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+:root[data-theme="classic"] .quick-slogan {
+  color: rgba(16, 24, 40, 0.68);
+}
+
+:root[data-theme="classic"] textarea {
+  color: #101828;
+}
+
+:root[data-theme="classic"] .quick-status {
+  color: rgba(102, 112, 133, 0.9);
+}
+
+:root[data-theme="classic"] .quick-form.is-saving .quick-status {
+  color: #2563eb;
+}
+
+:root[data-theme="classic"] .quick-form.is-error .quick-status {
   color: #b42318;
 }

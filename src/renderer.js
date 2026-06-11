@@ -8,6 +8,7 @@
   const settingsTabStorageKey = "personalToolbox.settingsTab";
   const validModules = new Set(["dashboard", "memo", "smoke", "settings"]);
   const validSettingsTabs = new Set(["general", "memo", "smoke"]);
+  const validThemes = new Set(["natural", "classic"]);
 
   function createMissingBridgeApi() {
     const fail = async () => {
@@ -18,6 +19,7 @@
         get: fail,
         setVaultPath: fail,
         setShortcuts: fail,
+        setTheme: fail,
         selectVaultPath: fail
       },
       smoke: {
@@ -183,6 +185,7 @@
     importMemoButton: $("importMemoButton"),
     exportMemoButton: $("exportMemoButton"),
     saveMemoSampleButton: $("saveMemoSampleButton"),
+    themeSelect: $("themeSelect"),
     quickMemoShortcutInput: $("quickMemoShortcutInput"),
     openMainShortcutInput: $("openMainShortcutInput"),
     saveQuickMemoShortcutButton: $("saveQuickMemoShortcutButton")
@@ -190,6 +193,15 @@
 
   function cleanText(value) {
     return String(value || "").trim();
+  }
+
+  function normalizeTheme(theme) {
+    const normalized = String(theme || "").trim();
+    return validThemes.has(normalized) ? normalized : "natural";
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = normalizeTheme(theme);
   }
 
   function setActiveModule(moduleName) {
@@ -732,6 +744,7 @@
 
   async function loadConfig() {
     state.config = await api.config.get();
+    applyTheme(state.config && state.config.theme);
   }
 
   async function loadSmoke() {
@@ -1983,6 +1996,7 @@
     refs.memoDataPathText.textContent = memoDataPath;
     refs.smokeDataPathTextMirror.textContent = smokeDataPath;
     refs.memoDataPathTextMirror.textContent = memoDataPath;
+    refs.themeSelect.value = normalizeTheme(state.config.theme);
 
     const smokeSettings = state.smoke && state.smoke.settings ? state.smoke.settings : {};
     const smokeMarkdownFolder = smokeSettings.folder || "Smoke Tests";
@@ -2010,6 +2024,15 @@
     state.config = await api.config.setShortcuts({ quickMemo, openMain });
     renderSettings();
     setToast("快捷键已保存");
+  }
+
+  async function saveTheme(theme) {
+    const nextTheme = normalizeTheme(theme);
+    applyTheme(nextTheme);
+    state.config = await api.config.setTheme(nextTheme);
+    applyTheme(state.config.theme);
+    renderSettings();
+    setToast("主题已切换");
   }
 
   async function saveSmokeSettingsFromSettings() {
@@ -2293,6 +2316,17 @@
     refs.importMemoButton.addEventListener("click", importMemoNotes);
     refs.exportMemoButton.addEventListener("click", exportMemoNotes);
     refs.saveMemoSampleButton.addEventListener("click", saveMemoImportSample);
+    refs.themeSelect.addEventListener("change", async () => {
+      const previousTheme = normalizeTheme(state.config && state.config.theme);
+      try {
+        await saveTheme(refs.themeSelect.value);
+      } catch (error) {
+        console.error(error);
+        applyTheme(previousTheme);
+        refs.themeSelect.value = previousTheme;
+        setToast("主题保存失败：" + error.message, true);
+      }
+    });
     refs.saveSmokeSettingsButton.addEventListener("click", async () => {
       try {
         await saveSmokeSettingsFromSettings();

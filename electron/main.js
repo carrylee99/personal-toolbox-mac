@@ -137,6 +137,10 @@ function registerIpcHandlers() {
     return Object.assign({}, config, { configPath: configStore.configPath });
   });
   ipcMain.handle("config:setShortcuts", async (_event, shortcuts) => setShortcuts(shortcuts));
+  ipcMain.handle("config:setTheme", async (_event, theme) => {
+    const config = await configStore.setTheme(theme);
+    return Object.assign({}, config, { configPath: configStore.configPath });
+  });
   ipcMain.handle("config:selectVaultPath", async () => {
     const current = await configStore.getVaultPath();
     const result = await dialog.showOpenDialog(mainWindow, {

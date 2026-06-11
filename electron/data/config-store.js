@@ -7,6 +7,8 @@ const DEFAULT_SHORTCUTS = {
   quickMemo: "Alt+Q",
   openMain: "Alt+M"
 };
+const VALID_THEMES = new Set(["natural", "classic"]);
+const DEFAULT_THEME = "natural";
 
 class ConfigStore {
   constructor(app) {
@@ -45,8 +47,14 @@ class ConfigStore {
       vaultPath: typeof (config && config.vaultPath) === "string" && config.vaultPath.trim()
         ? config.vaultPath.trim()
         : this.getDefaultVaultPath(),
-      shortcuts: Object.assign({}, DEFAULT_SHORTCUTS, this.normalizeShortcuts(config && config.shortcuts))
+      shortcuts: Object.assign({}, DEFAULT_SHORTCUTS, this.normalizeShortcuts(config && config.shortcuts)),
+      theme: this.normalizeTheme(config && config.theme)
     };
+  }
+
+  normalizeTheme(theme) {
+    const normalized = String(theme || "").trim();
+    return VALID_THEMES.has(normalized) ? normalized : DEFAULT_THEME;
   }
 
   normalizeShortcuts(shortcuts) {
@@ -90,10 +98,17 @@ class ConfigStore {
     config.shortcuts = this.normalizeShortcuts(shortcuts);
     return this.writeConfig(config);
   }
+
+  async setTheme(theme) {
+    const config = await this.readConfig();
+    config.theme = this.normalizeTheme(theme);
+    return this.writeConfig(config);
+  }
 }
 
 module.exports = {
   ConfigStore,
   LEGACY_DEFAULT_VAULT_PATH,
-  DEFAULT_SHORTCUTS
+  DEFAULT_SHORTCUTS,
+  DEFAULT_THEME
 };

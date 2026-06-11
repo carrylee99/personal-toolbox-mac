@@ -4,6 +4,9 @@
   const bridgeApi = window.toolbox || window.api;
   const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
   const fallbackApi = {
+    config: {
+      get: async () => ({ theme: "natural" })
+    },
     memo: {
       createNote: async () => {
         throw new Error(bridgeUnavailableMessage);
@@ -25,6 +28,7 @@
     }, {});
   }
   const api = {
+    config: mergeModuleApi(fallbackApi.config, bridgeApi && bridgeApi.config),
     memo: mergeModuleApi(fallbackApi.memo, bridgeApi && bridgeApi.memo),
     quickMemo: mergeModuleApi(fallbackApi.quickMemo, bridgeApi && bridgeApi.quickMemo)
   };
@@ -33,6 +37,24 @@
   const status = document.getElementById("quickMemoStatus");
   let isSaving = false;
   let statusTimer = null;
+
+  function normalizeTheme(theme) {
+    return theme === "classic" ? "classic" : "natural";
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = normalizeTheme(theme);
+  }
+
+  async function loadTheme() {
+    try {
+      const config = await api.config.get();
+      applyTheme(config && config.theme);
+    } catch (error) {
+      console.error(error);
+      applyTheme("natural");
+    }
+  }
 
   function focusInput() {
     window.requestAnimationFrame(() => {
@@ -126,5 +148,5 @@
   });
 
   api.quickMemo.onFocus(focusInput);
-  focusInput();
+  loadTheme().finally(focusInput);
 })();
