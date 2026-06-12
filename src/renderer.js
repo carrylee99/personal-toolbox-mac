@@ -6,9 +6,12 @@
   const api = createSafeBridgeApi(bridgeApi);
   const activeModuleStorageKey = "personalToolbox.activeModule";
   const settingsTabStorageKey = "personalToolbox.settingsTab";
+  const memoRecentDoneExpandedStorageKey = "personalToolbox.memoRecentDoneExpanded";
+  const memoOlderDoneExpandedStorageKey = "personalToolbox.memoOlderDoneExpanded";
   const validModules = new Set(["dashboard", "memo", "smoke", "settings"]);
   const validSettingsTabs = new Set(["general", "memo", "smoke"]);
   const validThemes = new Set(["natural", "classic"]);
+  const recentCompletedWindowMs = 3 * 24 * 60 * 60 * 1000;
 
   function createMissingBridgeApi() {
     const fail = async () => {
@@ -20,6 +23,7 @@
         setVaultPath: fail,
         setShortcuts: fail,
         setTheme: fail,
+        setMemoSettings: fail,
         selectVaultPath: fail
       },
       smoke: {
@@ -52,6 +56,8 @@
         importNotes: fail,
         exportNotes: fail,
         saveImportSample: fail,
+        pushToFeishu: fail,
+        testFeishuBot: fail,
         onChanged: () => () => {}
       },
       poem: {
@@ -109,6 +115,8 @@
     memoSearch: "",
     selectedMemoId: "",
     memoDrawerOpen: false,
+    memoRecentDoneExpanded: window.localStorage.getItem(memoRecentDoneExpandedStorageKey) !== "false",
+    memoOlderDoneExpanded: window.localStorage.getItem(memoOlderDoneExpandedStorageKey) === "true",
     dailyPoem: null,
     dailyPoemDateKey: "",
     dailyPoemLoading: false,
@@ -130,8 +138,6 @@
     todayTodoTile: $("todayTodoTile"),
     todayTodoCount: $("todayTodoCount"),
     todayTodoSummary: $("todayTodoSummary"),
-    dailyDiziguiText: $("dailyDiziguiText"),
-    dailyDiziguiMeaning: $("dailyDiziguiMeaning"),
     dailyPoemTitle: $("dailyPoemTitle"),
     dailyPoemContent: $("dailyPoemContent"),
     dailyPoemSource: $("dailyPoemSource"),
@@ -159,6 +165,7 @@
     casesList: $("casesList"),
     caseEditor: $("caseEditor"),
     memoSummary: $("memoSummary"),
+    pushMemoFeishuButton: $("pushMemoFeishuButton"),
     memoSearchLabel: $("memoSearchLabel"),
     memoSearchInput: $("memoSearchInput"),
     memoForm: $("memoForm"),
@@ -182,12 +189,21 @@
     smokeMarkdownFolderText: $("smokeMarkdownFolderText"),
     memoDataPathText: $("memoDataPathText"),
     memoDataPathTextMirror: $("memoDataPathTextMirror"),
+    quickMemoEnterToSaveInput: $("quickMemoEnterToSaveInput"),
+    feishuWebhookInput: $("feishuWebhookInput"),
+    feishuSecretInput: $("feishuSecretInput"),
+    feishuPushScopeSelect: $("feishuPushScopeSelect"),
+    feishuPushTimeInput: $("feishuPushTimeInput"),
+    feishuAutoPushInput: $("feishuAutoPushInput"),
+    saveFeishuSettingsButton: $("saveFeishuSettingsButton"),
+    testFeishuBotButton: $("testFeishuBotButton"),
     importMemoButton: $("importMemoButton"),
     exportMemoButton: $("exportMemoButton"),
     saveMemoSampleButton: $("saveMemoSampleButton"),
     themeSelect: $("themeSelect"),
     quickMemoShortcutInput: $("quickMemoShortcutInput"),
     openMainShortcutInput: $("openMainShortcutInput"),
+    saveOpenMainShortcutButton: $("saveOpenMainShortcutButton"),
     saveQuickMemoShortcutButton: $("saveQuickMemoShortcutButton")
   };
 
@@ -198,6 +214,24 @@
   function normalizeTheme(theme) {
     const normalized = String(theme || "").trim();
     return validThemes.has(normalized) ? normalized : "natural";
+  }
+
+  function normalizeMemoSettings(settings) {
+    const memoSettings = settings || {};
+    const feishu = memoSettings.feishu || {};
+    const pushScope = feishu.pushScope === "today_created_pending" ? "today_created_pending" : "all_pending";
+    const pushTime = /^\d{2}:\d{2}$/.test(String(feishu.pushTime || "")) ? feishu.pushTime : "09:00";
+    return {
+      quickMemoEnterToSave: !memoSettings || memoSettings.quickMemoEnterToSave !== false,
+      feishu: {
+        enabled: feishu.enabled === true,
+        webhookUrl: typeof feishu.webhookUrl === "string" ? feishu.webhookUrl : "",
+        secret: typeof feishu.secret === "string" ? feishu.secret : "",
+        pushScope,
+        pushTime,
+        lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate : ""
+      }
+    };
   }
 
   function applyTheme(theme) {
@@ -305,35 +339,6 @@
     { status: "failed", label: "失败" },
     { status: "incomplete", label: "未完成" },
     { status: "pending", label: "未执行" }
-  ];
-
-  const diziguiSentences = [
-    { text: "弟子规，圣人训。首孝悌，次谨信。", meaning: "先学孝顺父母、友爱兄弟，再培养谨慎守信。" },
-    { text: "泛爱众，而亲仁。有余力，则学文。", meaning: "广泛关爱他人，亲近有仁德的人；还有余力再学习文艺知识。" },
-    { text: "父母呼，应勿缓。父母命，行勿懒。", meaning: "父母呼唤要及时回应，交代的事情要认真去做。" },
-    { text: "父母教，须敬听。父母责，须顺承。", meaning: "面对父母教导与责备，应恭敬聆听、虚心接受。" },
-    { text: "冬则温，夏则凊。晨则省，昏则定。", meaning: "关心父母冷暖，早晚问候，让他们安心。" },
-    { text: "出必告，反必面。居有常，业无变。", meaning: "外出和回来都要告知父母，生活作息稳定，职责不轻易改变。" },
-    { text: "事虽小，勿擅为。苟擅为，子道亏。", meaning: "即使小事也别任性妄为，否则有亏为人子女的本分。" },
-    { text: "物虽小，勿私藏。苟私藏，亲心伤。", meaning: "东西再小也不要私自藏匿，以免伤害亲人信任。" },
-    { text: "亲所好，力为具。亲所恶，谨为去。", meaning: "父母喜欢的尽力准备，父母厌恶的谨慎避免。" },
-    { text: "身有伤，贻亲忧。德有伤，贻亲羞。", meaning: "身体受伤会让父母担忧，品德受损会让父母蒙羞。" },
-    { text: "兄道友，弟道恭。兄弟睦，孝在中。", meaning: "兄长友爱、弟妹恭敬，手足和睦也是孝的一部分。" },
-    { text: "财物轻，怨何生。言语忍，忿自泯。", meaning: "看轻财物、言语忍让，怨恨和怒气自然减少。" },
-    { text: "或饮食，或坐走。长者先，幼者后。", meaning: "饮食、落座、行走等场合，要懂得礼让长者。" },
-    { text: "称尊长，勿呼名。对尊长，勿见能。", meaning: "称呼长辈要尊敬，面对长辈不要炫耀逞能。" },
-    { text: "朝起早，夜眠迟。老易至，惜此时。", meaning: "珍惜时间，勤勉自律，不要虚度光阴。" },
-    { text: "冠必正，纽必结。袜与履，俱紧切。", meaning: "衣冠整洁得体，是对自己和他人的尊重。" },
-    { text: "置冠服，有定位。勿乱顿，致污秽。", meaning: "衣物用品放在固定位置，不乱丢乱放。" },
-    { text: "对饮食，勿拣择。食适可，勿过则。", meaning: "饮食不挑剔，适量即可，不要过度。" },
-    { text: "步从容，立端正。揖深圆，拜恭敬。", meaning: "举止从容端正，待人行礼要真诚恭敬。" },
-    { text: "缓揭帘，勿有声。宽转弯，勿触棱。", meaning: "做事轻缓细致，避免惊扰他人或碰撞损坏。" },
-    { text: "凡出言，信为先。诈与妄，奚可焉。", meaning: "说话以诚信为先，欺诈虚妄不可取。" },
-    { text: "话说多，不如少。惟其是，勿佞巧。", meaning: "话不必多，重要的是说真实、有用的话。" },
-    { text: "见人善，即思齐。纵去远，以渐跻。", meaning: "见到别人的优点，要向其学习并逐步靠近。" },
-    { text: "见人恶，即内省。有则改，无加警。", meaning: "看到别人的缺点，先反省自己，有则改之，无则警惕。" },
-    { text: "闻过怒，闻誉乐。损友来，益友却。", meaning: "听到批评就生气、听到称赞就高兴，会招来损友、远离益友。" },
-    { text: "闻誉恐，闻过欣。直谅士，渐相亲。", meaning: "面对称赞保持谨慎，听到批评愿意改进，正直朋友自然亲近。" }
   ];
 
   function acceleratorToDisplay(value) {
@@ -818,7 +823,6 @@
   function renderDashboard(options) {
     renderDashboardTime();
     renderDashboardTodo();
-    renderDailyDizigui();
     renderDailyPoem();
     if (state.activeModule === "dashboard") {
       loadDailyPoem(Boolean(options && options.forcePoem));
@@ -851,19 +855,6 @@
     });
     refs.todayTodoCount.textContent = String(todayTodo.length);
     refs.todayTodoSummary.textContent = "全部待办 " + todoNotes.length + " 条";
-  }
-
-  function renderDailyDizigui() {
-    const todayKey = getTodayKey();
-    const selected = diziguiSentences[hashString(todayKey) % diziguiSentences.length];
-    refs.dailyDiziguiText.textContent = selected.text;
-    refs.dailyDiziguiMeaning.textContent = selected.meaning;
-  }
-
-  function hashString(value) {
-    return String(value || "").split("").reduce((hash, char) => {
-      return (hash * 31 + char.charCodeAt(0)) >>> 0;
-    }, 2166136261);
   }
 
   function renderDailyPoem() {
@@ -1676,6 +1667,18 @@
     return (getMemoTitle(note) + "\n" + getMemoDetail(note)).toLowerCase();
   }
 
+  function getMemoCompletedTime(note) {
+    const value = Number(note && (note.completedAt || note.updatedAt || note.createdAt));
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function isMemoRecentlyCompleted(note) {
+    if (!note || !note.completed) {
+      return false;
+    }
+    return Date.now() - getMemoCompletedTime(note) <= recentCompletedWindowMs;
+  }
+
   function openMemoDrawer(noteId) {
     state.selectedMemoId = noteId;
     state.memoDrawerOpen = true;
@@ -1790,22 +1793,70 @@
     }
     const todo = filtered.filter((note) => !note.completed);
     const done = filtered.filter((note) => note.completed);
-    refs.memoList.append(createMemoGroup("待办", todo, "list"), createMemoGroup("已完成", done, "list"));
+    const recentDone = done.filter(isMemoRecentlyCompleted);
+    const olderDone = done.filter((note) => !isMemoRecentlyCompleted(note));
+    const groups = [
+      createMemoGroup("待办", todo, "list"),
+      createMemoGroup("3天内已完成", recentDone, "list", {
+        collapsible: true,
+        collapsed: !state.memoRecentDoneExpanded && !state.memoSearch.trim(),
+        storageKey: memoRecentDoneExpandedStorageKey
+      })
+    ];
+    if (olderDone.length || state.memoSearch.trim()) {
+      groups.push(createMemoGroup("已完成", olderDone, "list", {
+        collapsible: true,
+        collapsed: !state.memoOlderDoneExpanded && !state.memoSearch.trim(),
+        storageKey: memoOlderDoneExpandedStorageKey,
+        emptyText: "暂无超过3天的已完成"
+      }));
+    }
+    refs.memoList.append(...groups);
   }
 
-  function createMemoGroup(title, notes, sourceView) {
+  function createMemoGroup(title, notes, sourceView, options) {
+    const settings = options || {};
+    const isCollapsible = Boolean(settings.collapsible);
+    const isCollapsed = Boolean(isCollapsible && settings.collapsed);
     const group = document.createElement("section");
     group.className = "memo-group";
+    group.classList.toggle("is-collapsible", isCollapsible);
+    group.classList.toggle("is-collapsed", isCollapsed);
     const head = document.createElement("div");
     head.className = "memo-group-head";
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "memo-group-title";
     const heading = document.createElement("h3");
     heading.textContent = title;
+    titleWrap.append(heading);
+    if (isCollapsible) {
+      const toggle = document.createElement("button");
+      toggle.className = "memo-group-toggle";
+      toggle.type = "button";
+      toggle.textContent = isCollapsed ? "展开" : "收起";
+      toggle.setAttribute("aria-expanded", String(!isCollapsed));
+      toggle.addEventListener("click", () => {
+        if (settings.storageKey === memoRecentDoneExpandedStorageKey) {
+          state.memoRecentDoneExpanded = isCollapsed;
+          window.localStorage.setItem(memoRecentDoneExpandedStorageKey, String(state.memoRecentDoneExpanded));
+        } else {
+          state.memoOlderDoneExpanded = isCollapsed;
+          window.localStorage.setItem(memoOlderDoneExpandedStorageKey, String(state.memoOlderDoneExpanded));
+        }
+        renderMemoListView();
+      });
+      titleWrap.append(toggle);
+    }
     const count = document.createElement("span");
     count.textContent = notes.length + " 条";
-    head.append(heading, count);
+    count.className = "memo-group-count";
+    head.append(titleWrap, count);
     group.append(head);
+    if (isCollapsed) {
+      return group;
+    }
     if (!notes.length) {
-      group.append(createEmpty("暂无" + title));
+      group.append(createEmpty(settings.emptyText || ("暂无" + title)));
       return group;
     }
     const list = document.createElement("div");
@@ -1997,6 +2048,13 @@
     refs.smokeDataPathTextMirror.textContent = smokeDataPath;
     refs.memoDataPathTextMirror.textContent = memoDataPath;
     refs.themeSelect.value = normalizeTheme(state.config.theme);
+    const memoSettings = normalizeMemoSettings(state.config.memo);
+    refs.quickMemoEnterToSaveInput.checked = memoSettings.quickMemoEnterToSave;
+    refs.feishuWebhookInput.value = memoSettings.feishu.webhookUrl;
+    refs.feishuSecretInput.value = memoSettings.feishu.secret;
+    refs.feishuPushScopeSelect.value = memoSettings.feishu.pushScope;
+    refs.feishuPushTimeInput.value = memoSettings.feishu.pushTime;
+    refs.feishuAutoPushInput.checked = memoSettings.feishu.enabled;
 
     const smokeSettings = state.smoke && state.smoke.settings ? state.smoke.settings : {};
     const smokeMarkdownFolder = smokeSettings.folder || "Smoke Tests";
@@ -2033,6 +2091,21 @@
     applyTheme(state.config.theme);
     renderSettings();
     setToast("主题已切换");
+  }
+
+  async function saveMemoSettingsFromSettings() {
+    state.config = await api.config.setMemoSettings({
+      quickMemoEnterToSave: refs.quickMemoEnterToSaveInput.checked,
+      feishu: {
+        enabled: refs.feishuAutoPushInput.checked,
+        webhookUrl: refs.feishuWebhookInput.value,
+        secret: refs.feishuSecretInput.value,
+        pushScope: refs.feishuPushScopeSelect.value,
+        pushTime: refs.feishuPushTimeInput.value
+      }
+    });
+    renderSettings();
+    setToast("备忘录设置已保存");
   }
 
   async function saveSmokeSettingsFromSettings() {
@@ -2093,6 +2166,39 @@
       setToast("保存导入样例失败：" + error.message, true);
     } finally {
       refs.saveMemoSampleButton.disabled = false;
+    }
+  }
+
+  async function pushMemoTodosToFeishu() {
+    refs.pushMemoFeishuButton.disabled = true;
+    try {
+      const result = await api.memo.pushToFeishu();
+      if (result && result.skipped) {
+        setToast("暂无可推送待办");
+        return;
+      }
+      setToast("已推送飞书：待办 " + ((result && result.noteCount) || 0) + " 条");
+    } catch (error) {
+      console.error(error);
+      setToast("推送飞书失败：" + error.message, true);
+    } finally {
+      refs.pushMemoFeishuButton.disabled = false;
+    }
+  }
+
+  async function testFeishuBot() {
+    refs.testFeishuBotButton.disabled = true;
+    refs.saveFeishuSettingsButton.disabled = true;
+    try {
+      await saveMemoSettingsFromSettings();
+      await api.memo.testFeishuBot();
+      setToast("飞书机器人测试消息已发送");
+    } catch (error) {
+      console.error(error);
+      setToast("测试飞书机器人失败：" + error.message, true);
+    } finally {
+      refs.testFeishuBotButton.disabled = false;
+      refs.saveFeishuSettingsButton.disabled = false;
     }
   }
 
@@ -2291,6 +2397,7 @@
       state.memoSearch = refs.memoSearchInput.value;
       renderMemo();
     });
+    refs.pushMemoFeishuButton.addEventListener("click", pushMemoTodosToFeishu);
     refs.memoForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       await createMemoFromComposer(true);
@@ -2316,6 +2423,27 @@
     refs.importMemoButton.addEventListener("click", importMemoNotes);
     refs.exportMemoButton.addEventListener("click", exportMemoNotes);
     refs.saveMemoSampleButton.addEventListener("click", saveMemoImportSample);
+    refs.saveFeishuSettingsButton.addEventListener("click", async () => {
+      refs.saveFeishuSettingsButton.disabled = true;
+      try {
+        await saveMemoSettingsFromSettings();
+      } catch (error) {
+        console.error(error);
+        setToast("飞书设置保存失败：" + error.message, true);
+      } finally {
+        refs.saveFeishuSettingsButton.disabled = false;
+      }
+    });
+    refs.testFeishuBotButton.addEventListener("click", testFeishuBot);
+    refs.quickMemoEnterToSaveInput.addEventListener("change", async () => {
+      try {
+        await saveMemoSettingsFromSettings();
+      } catch (error) {
+        console.error(error);
+        renderSettings();
+        setToast("备忘录设置保存失败：" + error.message, true);
+      }
+    });
     refs.themeSelect.addEventListener("change", async () => {
       const previousTheme = normalizeTheme(state.config && state.config.theme);
       try {
@@ -2338,6 +2466,14 @@
 
     bindShortcutInput(refs.quickMemoShortcutInput);
     bindShortcutInput(refs.openMainShortcutInput);
+    refs.saveOpenMainShortcutButton.addEventListener("click", async () => {
+      try {
+        await saveShortcuts();
+      } catch (error) {
+        console.error(error);
+        setToast("快捷键保存失败：" + error.message, true);
+      }
+    });
     refs.saveQuickMemoShortcutButton.addEventListener("click", async () => {
       try {
         await saveShortcuts();

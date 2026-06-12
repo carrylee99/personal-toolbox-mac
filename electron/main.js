@@ -1,9 +1,11 @@
+const fs = require("node:fs");
 const path = require("node:path");
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electron");
 const { ConfigStore } = require("./data/config-store");
 const { SmokeStore } = require("./data/smoke-store");
 const { MemoStore } = require("./data/memo-store");
 const { DailyPoemService } = require("./data/daily-poem-service");
+const { filterTodoNotes, sendTestMessage, sendTodoNotes, toLocalDateKey } = require("./data/feishu-bot-service");
 
 app.setName("个人工具箱");
 app.setAppUserModelId("com.lixuhui.personal-toolbox");
@@ -18,6 +20,11 @@ let registeredQuickMemoShortcut = "";
 let registeredOpenMainShortcut = "";
 let lastQuickMemoClosedAt = 0;
 let quickMemoSaving = false;
+let memoDataWatcher = null;
+let memoDataWatchPath = "";
+let memoDataWatchTimer = null;
+let feishuAutoPushTimer = null;
+let feishuAutoPushRunning = false;
 
 function sanitizeExportFileName(value) {
   return String(value || "冒烟记录")
@@ -28,17 +35,126 @@ function sanitizeExportFileName(value) {
 }
 
 function todayKey() {
+  return toLocalDateKey(new Date());
+}
+
+function currentMinuteKey() {
   const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0")
-  ].join("-");
+  return [String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0")].join(":");
 }
 
 function notifyMemoChanged() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("memo:changed");
+  }
+}
+
+function stopMemoDataWatcher() {
+  if (memoDataWatchTimer) {
+    clearTimeout(memoDataWatchTimer);
+    memoDataWatchTimer = null;
+  }
+  if (memoDataWatcher) {
+    memoDataWatcher.close();
+    memoDataWatcher = null;
+  }
+  memoDataWatchPath = "";
+}
+
+function scheduleExternalMemoRefresh() {
+  if (memoDataWatchTimer) {
+    clearTimeout(memoDataWatchTimer);
+  }
+  memoDataWatchTimer = setTimeout(() => {
+    memoDataWatchTimer = null;
+    notifyMemoChanged();
+  }, 120);
+}
+
+async function startMemoDataWatcher() {
+  if (!memoStore) {
+    return;
+  }
+  try {
+    const dataPath = await memoStore.getDataPath();
+    const watchDir = path.dirname(dataPath);
+    if (memoDataWatcher && memoDataWatchPath === dataPath) {
+      return;
+    }
+    stopMemoDataWatcher();
+    await fs.promises.mkdir(watchDir, { recursive: true });
+    memoDataWatchPath = dataPath;
+    memoDataWatcher = fs.watch(watchDir, (eventType, filename) => {
+      if (!filename || filename.toString() === path.basename(dataPath)) {
+        scheduleExternalMemoRefresh();
+      }
+    });
+    memoDataWatcher.on("error", (error) => {
+      console.error("Failed to watch memo data file", error);
+      stopMemoDataWatcher();
+    });
+  } catch (error) {
+    console.error("Failed to start memo data watcher", error);
+  }
+}
+
+function getFeishuSettings(config) {
+  return config && config.memo && config.memo.feishu ? config.memo.feishu : {};
+}
+
+async function pushMemoTodosToFeishu(trigger) {
+  const config = await configStore.getConfig();
+  const feishu = getFeishuSettings(config);
+  const notes = await memoStore.listNotes();
+  const targetNotes = filterTodoNotes(notes, feishu.pushScope, new Date());
+  if (!targetNotes.length) {
+    return {
+      skipped: true,
+      reason: "empty",
+      noteCount: 0,
+      pushScope: feishu.pushScope || "all_pending",
+      trigger: trigger || "manual"
+    };
+  }
+  const result = await sendTodoNotes(feishu, targetNotes, { trigger: trigger || "manual" });
+  return Object.assign({ skipped: false, trigger: trigger || "manual" }, result);
+}
+
+async function checkFeishuAutoPush() {
+  if (feishuAutoPushRunning || !configStore || !memoStore) {
+    return;
+  }
+  feishuAutoPushRunning = true;
+  try {
+    const config = await configStore.getConfig();
+    const feishu = getFeishuSettings(config);
+    const today = todayKey();
+    if (!feishu.enabled || !feishu.webhookUrl || feishu.lastPushedDate === today || feishu.pushTime !== currentMinuteKey()) {
+      return;
+    }
+    const result = await pushMemoTodosToFeishu("auto");
+    if (!result.skipped) {
+      await configStore.setMemoSettings({ feishu: { lastPushedDate: today } });
+    }
+  } catch (error) {
+    console.error("Failed to auto push memo todos to Feishu", error);
+  } finally {
+    feishuAutoPushRunning = false;
+  }
+}
+
+function startFeishuAutoPushTimer() {
+  if (feishuAutoPushTimer) {
+    clearInterval(feishuAutoPushTimer);
+  }
+  feishuAutoPushTimer = setInterval(checkFeishuAutoPush, 60 * 1000);
+  checkFeishuAutoPush();
+}
+
+function stopFeishuAutoPushTimer() {
+  if (feishuAutoPushTimer) {
+    clearInterval(feishuAutoPushTimer);
+    feishuAutoPushTimer = null;
   }
 }
 
@@ -134,11 +250,16 @@ function registerIpcHandlers() {
   ipcMain.handle("config:get", () => configStore.getConfig());
   ipcMain.handle("config:setVaultPath", async (_event, vaultPath) => {
     const config = await configStore.setVaultPath(vaultPath);
+    await startMemoDataWatcher();
     return Object.assign({}, config, { configPath: configStore.configPath });
   });
   ipcMain.handle("config:setShortcuts", async (_event, shortcuts) => setShortcuts(shortcuts));
   ipcMain.handle("config:setTheme", async (_event, theme) => {
     const config = await configStore.setTheme(theme);
+    return Object.assign({}, config, { configPath: configStore.configPath });
+  });
+  ipcMain.handle("config:setMemoSettings", async (_event, settings) => {
+    const config = await configStore.setMemoSettings(settings);
     return Object.assign({}, config, { configPath: configStore.configPath });
   });
   ipcMain.handle("config:selectVaultPath", async () => {
@@ -152,6 +273,7 @@ function registerIpcHandlers() {
       return configStore.getConfig();
     }
     const config = await configStore.setVaultPath(result.filePaths[0]);
+    await startMemoDataWatcher();
     return Object.assign({}, config, { configPath: configStore.configPath });
   });
 
@@ -280,6 +402,11 @@ function registerIpcHandlers() {
     }
     const targetPath = /\.json$/i.test(result.filePath) ? result.filePath : result.filePath + ".json";
     return memoStore.writeImportSample(targetPath);
+  });
+  ipcMain.handle("memo:pushToFeishu", async () => pushMemoTodosToFeishu("manual"));
+  ipcMain.handle("memo:testFeishuBot", async () => {
+    const config = await configStore.getConfig();
+    return sendTestMessage(getFeishuSettings(config));
   });
   ipcMain.handle("poem:getDaily", (_event, dateKey) => dailyPoemService.getDailyPoem(dateKey));
   ipcMain.handle("quickMemo:close", () => {
@@ -442,6 +569,8 @@ app.whenReady().then(() => {
   dailyPoemService = new DailyPoemService(app);
   registerIpcHandlers();
   createWindow();
+  startMemoDataWatcher();
+  startFeishuAutoPushTimer();
   registerConfiguredShortcuts();
 
   app.on("activate", () => {
@@ -461,5 +590,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  stopMemoDataWatcher();
+  stopFeishuAutoPushTimer();
   globalShortcut.unregisterAll();
 });

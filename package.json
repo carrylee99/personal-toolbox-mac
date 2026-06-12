@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron .",
     "icons": "bash scripts/generate-icons.sh",
-    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/data/config-store.js && node --check electron/data/smoke-store.js && node --check electron/data/memo-store.js && node --check electron/data/daily-poem-service.js && node --check src/renderer.js && node --check src/quick-memo.js",
+    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/data/config-store.js && node --check electron/data/smoke-store.js && node --check electron/data/memo-store.js && node --check electron/data/daily-poem-service.js && node --check electron/data/feishu-bot-service.js && node --check src/renderer.js && node --check src/quick-memo.js",
     "build:mac": "npm run icons && electron-builder --mac dir --config electron-builder.yml",
     "dist": "npm run icons && electron-builder --mac dmg --config electron-builder.yml"
   },

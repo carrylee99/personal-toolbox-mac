@@ -9,6 +9,18 @@ const DEFAULT_SHORTCUTS = {
 };
 const VALID_THEMES = new Set(["natural", "classic"]);
 const DEFAULT_THEME = "natural";
+const VALID_FEISHU_PUSH_SCOPES = new Set(["all_pending", "today_created_pending"]);
+const DEFAULT_MEMO_SETTINGS = {
+  quickMemoEnterToSave: true,
+  feishu: {
+    enabled: false,
+    webhookUrl: "",
+    secret: "",
+    pushScope: "all_pending",
+    pushTime: "09:00",
+    lastPushedDate: ""
+  }
+};
 
 class ConfigStore {
   constructor(app) {
@@ -48,7 +60,8 @@ class ConfigStore {
         ? config.vaultPath.trim()
         : this.getDefaultVaultPath(),
       shortcuts: Object.assign({}, DEFAULT_SHORTCUTS, this.normalizeShortcuts(config && config.shortcuts)),
-      theme: this.normalizeTheme(config && config.theme)
+      theme: this.normalizeTheme(config && config.theme),
+      memo: Object.assign({}, DEFAULT_MEMO_SETTINGS, this.normalizeMemoSettings(config && config.memo))
     };
   }
 
@@ -65,6 +78,32 @@ class ConfigStore {
       openMain: typeof (shortcuts && shortcuts.openMain) === "string" && shortcuts.openMain.trim()
         ? shortcuts.openMain.trim()
         : DEFAULT_SHORTCUTS.openMain
+    };
+  }
+
+  normalizeMemoSettings(settings) {
+    const memoSettings = settings || {};
+    return {
+      quickMemoEnterToSave: Object.prototype.hasOwnProperty.call(memoSettings, "quickMemoEnterToSave")
+        ? memoSettings.quickMemoEnterToSave !== false
+        : DEFAULT_MEMO_SETTINGS.quickMemoEnterToSave,
+      feishu: this.normalizeFeishuSettings(memoSettings.feishu)
+    };
+  }
+
+  normalizeFeishuSettings(settings) {
+    const feishu = settings || {};
+    const pushScope = String(feishu.pushScope || "").trim();
+    const pushTime = /^\d{2}:\d{2}$/.test(String(feishu.pushTime || "").trim())
+      ? String(feishu.pushTime).trim()
+      : DEFAULT_MEMO_SETTINGS.feishu.pushTime;
+    return {
+      enabled: feishu.enabled === true,
+      webhookUrl: typeof feishu.webhookUrl === "string" ? feishu.webhookUrl.trim() : DEFAULT_MEMO_SETTINGS.feishu.webhookUrl,
+      secret: typeof feishu.secret === "string" ? feishu.secret.trim() : DEFAULT_MEMO_SETTINGS.feishu.secret,
+      pushScope: VALID_FEISHU_PUSH_SCOPES.has(pushScope) ? pushScope : DEFAULT_MEMO_SETTINGS.feishu.pushScope,
+      pushTime,
+      lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate.trim() : DEFAULT_MEMO_SETTINGS.feishu.lastPushedDate
     };
   }
 
@@ -104,11 +143,27 @@ class ConfigStore {
     config.theme = this.normalizeTheme(theme);
     return this.writeConfig(config);
   }
+
+  async setMemoSettings(settings) {
+    const config = await this.readConfig();
+    const currentMemo = this.normalizeMemoSettings(config.memo);
+    const patch = settings || {};
+    const nextMemo = Object.assign({}, currentMemo);
+    if (Object.prototype.hasOwnProperty.call(patch, "quickMemoEnterToSave")) {
+      nextMemo.quickMemoEnterToSave = patch.quickMemoEnterToSave !== false;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "feishu")) {
+      nextMemo.feishu = this.normalizeFeishuSettings(Object.assign({}, currentMemo.feishu, patch.feishu || {}));
+    }
+    config.memo = this.normalizeMemoSettings(nextMemo);
+    return this.writeConfig(config);
+  }
 }
 
 module.exports = {
   ConfigStore,
   LEGACY_DEFAULT_VAULT_PATH,
   DEFAULT_SHORTCUTS,
-  DEFAULT_THEME
+  DEFAULT_THEME,
+  DEFAULT_MEMO_SETTINGS
 };
