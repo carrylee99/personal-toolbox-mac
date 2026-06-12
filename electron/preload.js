@@ -6,6 +6,7 @@ const toolboxApi = {
     setVaultPath: (vaultPath) => ipcRenderer.invoke("config:setVaultPath", vaultPath),
     setShortcuts: (shortcuts) => ipcRenderer.invoke("config:setShortcuts", shortcuts),
     setTheme: (theme) => ipcRenderer.invoke("config:setTheme", theme),
+    setMemoSettings: (settings) => ipcRenderer.invoke("config:setMemoSettings", settings),
     selectVaultPath: () => ipcRenderer.invoke("config:selectVaultPath")
   },
   smoke: {
@@ -38,6 +39,8 @@ const toolboxApi = {
     importNotes: () => ipcRenderer.invoke("memo:importNotes"),
     exportNotes: () => ipcRenderer.invoke("memo:exportNotes"),
     saveImportSample: () => ipcRenderer.invoke("memo:saveImportSample"),
+    pushToFeishu: () => ipcRenderer.invoke("memo:pushToFeishu"),
+    testFeishuBot: () => ipcRenderer.invoke("memo:testFeishuBot"),
     onChanged: (callback) => {
       const listener = () => callback();
       ipcRenderer.on("memo:changed", listener);

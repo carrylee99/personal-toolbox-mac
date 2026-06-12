@@ -5,7 +5,7 @@
   const bridgeUnavailableMessage = "应用桥接未加载，请重启 App 或重新安装最新版。";
   const fallbackApi = {
     config: {
-      get: async () => ({ theme: "natural" })
+      get: async () => ({ theme: "natural", memo: { quickMemoEnterToSave: true } })
     },
     memo: {
       createNote: async () => {
@@ -37,6 +37,7 @@
   const status = document.getElementById("quickMemoStatus");
   let isSaving = false;
   let statusTimer = null;
+  let quickMemoEnterToSave = true;
 
   function normalizeTheme(theme) {
     return theme === "classic" ? "classic" : "natural";
@@ -46,13 +47,21 @@
     document.documentElement.dataset.theme = normalizeTheme(theme);
   }
 
-  async function loadTheme() {
+  function normalizeMemoSettings(settings) {
+    return {
+      quickMemoEnterToSave: !settings || settings.quickMemoEnterToSave !== false
+    };
+  }
+
+  async function loadConfig() {
     try {
       const config = await api.config.get();
       applyTheme(config && config.theme);
+      quickMemoEnterToSave = normalizeMemoSettings(config && config.memo).quickMemoEnterToSave;
     } catch (error) {
       console.error(error);
       applyTheme("natural");
+      quickMemoEnterToSave = true;
     }
   }
 
@@ -97,13 +106,23 @@
     await api.quickMemo.close();
   }
 
+  function createMemoPayload(value) {
+    const content = String(value || "").replace(/\r\n/g, "\n").trim();
+    const lines = content.split("\n");
+    const title = (lines.shift() || "").trim();
+    return {
+      title,
+      detail: lines.join("\n").trim()
+    };
+  }
+
   async function saveMemo() {
     if (isSaving) {
       return;
     }
 
-    const content = input.value.trim();
-    if (!content) {
+    const payload = createMemoPayload(input.value);
+    if (!payload.title) {
       setStatus("写点内容再保存", "hint", true);
       focusInput();
       return;
@@ -115,7 +134,7 @@
     await setSavingState(true);
 
     try {
-      await api.memo.createNote(content);
+      await api.memo.createNote(payload);
       await closeWindow();
     } catch (error) {
       console.error(error);
@@ -141,12 +160,20 @@
       return;
     }
 
-    if (event.key === "Enter" && event.metaKey && !event.isComposing) {
+    if (event.key !== "Enter" || event.isComposing) {
+      return;
+    }
+
+    if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      return;
+    }
+
+    if (quickMemoEnterToSave || event.ctrlKey || event.metaKey) {
       event.preventDefault();
       saveMemo();
     }
   });
 
   api.quickMemo.onFocus(focusInput);
-  loadTheme().finally(focusInput);
+  loadConfig().finally(focusInput);
 })();

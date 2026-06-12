@@ -49,13 +49,6 @@
               <strong id="todayTodoCount">0</strong>
               <p id="todayTodoSummary">读取中</p>
             </button>
-            <article class="dashboard-dizigui">
-              <div class="dizigui-head">
-                <span class="tile-label">每日一句弟子规</span>
-                <strong id="dailyDiziguiText">-</strong>
-              </div>
-              <p id="dailyDiziguiMeaning">-</p>
-            </article>
             <article class="dashboard-poem">
               <div class="poem-head">
                 <span class="tile-label">每日一首诗</span>
@@ -135,6 +128,7 @@
               <p id="memoSummary">读取中</p>
             </div>
             <div class="module-actions">
+              <button id="pushMemoFeishuButton" type="button">推送飞书</button>
               <label id="memoSearchLabel" class="search-box">
                 <span>搜索</span>
                 <input id="memoSearchInput" type="search" placeholder="搜索备忘" autocomplete="off" />
@@ -206,21 +200,67 @@
                 </section>
                 <section class="settings-card panel">
                   <label class="field">
-                    <span>极速备忘</span>
-                    <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
-                  </label>
-                  <label class="field">
                     <span>打开主窗口</span>
                     <input id="openMainShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
                   </label>
                   <div class="inline-actions">
-                    <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
+                    <button id="saveOpenMainShortcutButton" class="primary" type="button">保存快捷键</button>
                   </div>
-                  <p class="setting-help">点击输入框后按下组合键。极速备忘弹出独立输入框；打开主窗口会唤起完整 App。</p>
+                  <p class="setting-help">点击输入框后按下组合键。打开主窗口会唤起完整 App。</p>
                 </section>
               </section>
 
               <section id="settingsMemoTab" class="settings-pane">
+                <section class="settings-card panel">
+                  <label class="field">
+                    <span>极速备忘快捷键</span>
+                    <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
+                  </div>
+                  <label class="checkbox-field">
+                    <input id="quickMemoEnterToSaveInput" type="checkbox" />
+                    <span>极速备忘使用 Enter 快捷保存</span>
+                  </label>
+                  <p class="setting-help">开启后 Enter 保存，Shift + Enter 换行；Ctrl + Enter 或 Command + Enter 会保存，并把首行写入标题、后续内容写入详情。</p>
+                </section>
+                <section class="settings-card panel">
+                  <div class="setting-block-head">
+                    <strong>飞书机器人</strong>
+                    <p>把待办推送到你自己的飞书群机器人。</p>
+                  </div>
+                  <label class="field">
+                    <span>Webhook</span>
+                    <input id="feishuWebhookInput" type="url" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>签名密钥</span>
+                    <input id="feishuSecretInput" type="password" placeholder="未开启签名可留空" autocomplete="off" />
+                  </label>
+                  <div class="settings-grid-2">
+                    <label class="field">
+                      <span>推送范围</span>
+                      <select id="feishuPushScopeSelect">
+                        <option value="all_pending">全部未完成待办</option>
+                        <option value="today_created_pending">今日新增未完成待办</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>自动推送时间</span>
+                      <input id="feishuPushTimeInput" type="time" value="09:00" />
+                    </label>
+                  </div>
+                  <label class="checkbox-field">
+                    <input id="feishuAutoPushInput" type="checkbox" />
+                    <span>启用每日自动推送</span>
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveFeishuSettingsButton" class="primary" type="button">保存飞书设置</button>
+                    <button id="testFeishuBotButton" type="button">测试机器人</button>
+                  </div>
+                  <p class="setting-help">在飞书群添加自定义机器人后复制 Webhook；如果机器人开启签名校验，请同时填写签名密钥。</p>
+                </section>
                 <section class="settings-card panel">
                   <div class="inline-actions">
                     <button id="importMemoButton" type="button">导入备忘录</button>
