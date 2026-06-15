@@ -13,6 +13,7 @@
 - 每日备忘
   - 快速新增待办
   - 支持标题和详情字段
+  - 支持截止时间和到期通知
   - 支持完成、恢复、删除
   - 支持 JSON 导入和导出
   - 支持极速备忘浮窗和自定义快捷键
@@ -70,7 +71,9 @@ DMG 会输出到 `dist/`。
       "completed": false,
       "createdAt": "2026-06-10T09:00:00.000+08:00",
       "updatedAt": "2026-06-10T09:20:00.000+08:00",
-      "completedAt": null
+      "completedAt": null,
+      "dueAt": "2026-06-10T18:30:00.000+08:00",
+      "deadlineNotifiedAt": null
     }
   ]
 }

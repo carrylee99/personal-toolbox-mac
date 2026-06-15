@@ -1331,9 +1331,38 @@ button.dashboard-tile:focus {
   display: none;
 }
 
+.note-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .note-content time {
   color: var(--muted);
   font-size: 12px;
+}
+
+.note-due {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+  padding: 2px 7px;
+}
+
+.note-due.is-overdue {
+  background: rgba(190, 24, 24, 0.1);
+  color: var(--danger);
+}
+
+.note-due.is-done {
+  background: rgba(104, 118, 110, 0.1);
+  color: var(--muted);
 }
 
 .note-source {
@@ -1444,6 +1473,12 @@ button.dashboard-tile:focus {
   font-weight: 800;
 }
 
+.memo-drawer-fields input[type="datetime-local"] {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .memo-drawer-fields textarea {
   min-height: 280px;
   resize: vertical;
@@ -1509,6 +1544,23 @@ button.dashboard-tile:focus {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.time-list {
+  display: grid;
+  gap: 8px;
+}
+
+.time-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) auto;
+  justify-content: start;
+  gap: 8px;
+  align-items: center;
+}
+
+.time-row input {
+  min-width: 120px;
 }
 
 .settings-layout {

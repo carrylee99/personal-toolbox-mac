@@ -190,10 +190,14 @@
     memoDataPathText: $("memoDataPathText"),
     memoDataPathTextMirror: $("memoDataPathTextMirror"),
     quickMemoEnterToSaveInput: $("quickMemoEnterToSaveInput"),
+    deadlineNotifyEnabledInput: $("deadlineNotifyEnabledInput"),
+    deadlineNotifyMacosInput: $("deadlineNotifyMacosInput"),
+    deadlineNotifyFeishuInput: $("deadlineNotifyFeishuInput"),
     feishuWebhookInput: $("feishuWebhookInput"),
     feishuSecretInput: $("feishuSecretInput"),
     feishuPushScopeSelect: $("feishuPushScopeSelect"),
-    feishuPushTimeInput: $("feishuPushTimeInput"),
+    feishuPushTimesList: $("feishuPushTimesList"),
+    addFeishuPushTimeButton: $("addFeishuPushTimeButton"),
     feishuAutoPushInput: $("feishuAutoPushInput"),
     saveFeishuSettingsButton: $("saveFeishuSettingsButton"),
     testFeishuBotButton: $("testFeishuBotButton"),
@@ -219,19 +223,57 @@
   function normalizeMemoSettings(settings) {
     const memoSettings = settings || {};
     const feishu = memoSettings.feishu || {};
+    const deadlineNotify = memoSettings.deadlineNotify || {};
+    const deadlineChannels = deadlineNotify.channels || {};
     const pushScope = feishu.pushScope === "today_created_pending" ? "today_created_pending" : "all_pending";
-    const pushTime = /^\d{2}:\d{2}$/.test(String(feishu.pushTime || "")) ? feishu.pushTime : "09:00";
+    const pushTimes = normalizePushTimes(Array.isArray(feishu.pushTimes) && feishu.pushTimes.length ? feishu.pushTimes : [feishu.pushTime || "09:00"]);
     return {
       quickMemoEnterToSave: !memoSettings || memoSettings.quickMemoEnterToSave !== false,
+      deadlineNotify: {
+        enabled: deadlineNotify.enabled === true,
+        channels: {
+          macos: deadlineChannels.macos !== false,
+          feishu: deadlineChannels.feishu === true
+        }
+      },
       feishu: {
         enabled: feishu.enabled === true,
         webhookUrl: typeof feishu.webhookUrl === "string" ? feishu.webhookUrl : "",
         secret: typeof feishu.secret === "string" ? feishu.secret : "",
         pushScope,
-        pushTime,
-        lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate : ""
+        pushTime: pushTimes[0],
+        pushTimes,
+        lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate : "",
+        lastPushedTimes: Array.isArray(feishu.lastPushedTimes) ? feishu.lastPushedTimes.map(normalizePushTime).filter(Boolean) : []
       }
     };
+  }
+
+  function normalizePushTimes(values) {
+    const seen = new Set();
+    const times = [];
+    (Array.isArray(values) ? values : []).forEach((value) => {
+      const time = normalizePushTime(value);
+      if (time && !seen.has(time)) {
+        seen.add(time);
+        times.push(time);
+      }
+    });
+    return times.length ? times : ["09:00"];
+  }
+
+  function normalizePushTime(value) {
+    const time = String(value || "").trim();
+    const match = /^(\d{2}):(\d{2})$/.exec(time);
+    if (!match) {
+      return "";
+    }
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return "";
+    }
+    return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
   }
 
   function applyTheme(theme) {
@@ -317,6 +359,47 @@
       hour: "2-digit",
       minute: "2-digit"
     }).format(new Date(value));
+  }
+
+  function normalizeMemoDueAt(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    const time = date.getTime();
+    if (!Number.isFinite(time)) {
+      return null;
+    }
+    return Math.floor(time / 60000) * 60000;
+  }
+
+  function toDateTimeLocalValue(value) {
+    const time = normalizeMemoDueAt(value);
+    if (!time) {
+      return "";
+    }
+    const date = new Date(time);
+    return [
+      [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+      ].join("-"),
+      [String(date.getHours()).padStart(2, "0"), String(date.getMinutes()).padStart(2, "0")].join(":")
+    ].join("T");
+  }
+
+  function parseDateTimeLocalValue(value) {
+    const text = cleanText(value);
+    if (!text) {
+      return null;
+    }
+    return normalizeMemoDueAt(new Date(text));
+  }
+
+  function formatDueTime(value) {
+    const time = normalizeMemoDueAt(value);
+    return time ? formatTime(time) : "";
   }
 
   function formatDateKey(value) {
@@ -1679,6 +1762,11 @@
     return Date.now() - getMemoCompletedTime(note) <= recentCompletedWindowMs;
   }
 
+  function isMemoOverdue(note) {
+    const dueAt = normalizeMemoDueAt(note && note.dueAt);
+    return Boolean(dueAt && !(note && note.completed) && dueAt <= Date.now());
+  }
+
   function openMemoDrawer(noteId) {
     state.selectedMemoId = noteId;
     state.memoDrawerOpen = true;
@@ -1697,15 +1785,16 @@
     }
     const nextTitle = Object.prototype.hasOwnProperty.call(patch || {}, "title") ? cleanText(patch.title) : getMemoTitle(note);
     const nextDetail = Object.prototype.hasOwnProperty.call(patch || {}, "detail") ? cleanText(patch.detail) : getMemoDetail(note);
+    const nextDueAt = Object.prototype.hasOwnProperty.call(patch || {}, "dueAt") ? normalizeMemoDueAt(patch.dueAt) : normalizeMemoDueAt(note.dueAt);
     if (!nextTitle) {
       setToast("标题不能为空", true);
       return false;
     }
-    if (nextTitle === getMemoTitle(note) && nextDetail === getMemoDetail(note)) {
+    if (nextTitle === getMemoTitle(note) && nextDetail === getMemoDetail(note) && nextDueAt === normalizeMemoDueAt(note.dueAt)) {
       return true;
     }
     try {
-      await api.memo.updateNote(noteId, { title: nextTitle, detail: nextDetail });
+      await api.memo.updateNote(noteId, { title: nextTitle, detail: nextDetail, dueAt: nextDueAt });
     } catch (error) {
       console.error(error);
       setToast("自动保存失败：" + error.message, true);
@@ -1904,7 +1993,19 @@
     const timeValue = note.completed && note.completedAt ? note.completedAt : note.updatedAt;
     time.dateTime = new Date(timeValue).toISOString();
     time.textContent = (note.completed ? "完成于 " : "更新于 ") + formatTime(timeValue);
-    content.append(title, detail, time);
+    const metaLine = document.createElement("div");
+    metaLine.className = "note-meta-line";
+    metaLine.append(time);
+    const dueAt = normalizeMemoDueAt(note.dueAt);
+    if (dueAt) {
+      const due = document.createElement("span");
+      due.className = "note-due";
+      due.classList.toggle("is-overdue", isMemoOverdue(note));
+      due.classList.toggle("is-done", note.completed);
+      due.textContent = (isMemoOverdue(note) ? "已逾期 " : "截止 ") + formatDueTime(dueAt);
+      metaLine.append(due);
+    }
+    content.append(title, detail, metaLine);
 
     const actions = document.createElement("div");
     actions.className = "note-actions";
@@ -1973,6 +2074,37 @@
     });
     titleField.append(titleLabel, titleInput);
 
+    const dueField = document.createElement("label");
+    dueField.className = "field";
+    const dueLabel = document.createElement("span");
+    dueLabel.textContent = "截止时间";
+    const dueInput = document.createElement("input");
+    dueInput.type = "datetime-local";
+    dueInput.value = toDateTimeLocalValue(note.dueAt);
+    let lastSavedDueValue = dueInput.value;
+    async function saveDueAt() {
+      if (dueInput.value === lastSavedDueValue) {
+        return;
+      }
+      const ok = await autoSaveMemoFields(note.id, { dueAt: parseDateTimeLocalValue(dueInput.value) });
+      if (ok) {
+        lastSavedDueValue = dueInput.value;
+        return;
+      }
+      const latest = getMemoNoteById(note.id) || note;
+      dueInput.value = toDateTimeLocalValue(latest.dueAt);
+      lastSavedDueValue = dueInput.value;
+    }
+    dueInput.addEventListener("change", saveDueAt);
+    dueInput.addEventListener("blur", saveDueAt);
+    dueInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMemoDrawer();
+      }
+    });
+    dueField.append(dueLabel, dueInput);
+
     const detailField = document.createElement("label");
     detailField.className = "field";
     const detailLabel = document.createElement("span");
@@ -1988,7 +2120,7 @@
       }
     });
     detailField.append(detailLabel, detailInput);
-    fields.append(titleField, detailField);
+    fields.append(titleField, dueField, detailField);
 
     const meta = document.createElement("dl");
     meta.className = "memo-drawer-meta";
@@ -1998,6 +2130,12 @@
     );
     if (note.completed && note.completedAt) {
       meta.append(createMetaRow("完成", formatTime(note.completedAt)));
+    }
+    if (note.dueAt) {
+      meta.append(createMetaRow("截止", formatDueTime(note.dueAt)));
+    }
+    if (note.deadlineNotifiedAt) {
+      meta.append(createMetaRow("提醒", formatTime(note.deadlineNotifiedAt)));
     }
 
     const actions = document.createElement("div");
@@ -2050,10 +2188,13 @@
     refs.themeSelect.value = normalizeTheme(state.config.theme);
     const memoSettings = normalizeMemoSettings(state.config.memo);
     refs.quickMemoEnterToSaveInput.checked = memoSettings.quickMemoEnterToSave;
+    refs.deadlineNotifyEnabledInput.checked = memoSettings.deadlineNotify.enabled;
+    refs.deadlineNotifyMacosInput.checked = memoSettings.deadlineNotify.channels.macos;
+    refs.deadlineNotifyFeishuInput.checked = memoSettings.deadlineNotify.channels.feishu;
     refs.feishuWebhookInput.value = memoSettings.feishu.webhookUrl;
     refs.feishuSecretInput.value = memoSettings.feishu.secret;
     refs.feishuPushScopeSelect.value = memoSettings.feishu.pushScope;
-    refs.feishuPushTimeInput.value = memoSettings.feishu.pushTime;
+    renderFeishuPushTimes(memoSettings.feishu.pushTimes);
     refs.feishuAutoPushInput.checked = memoSettings.feishu.enabled;
 
     const smokeSettings = state.smoke && state.smoke.settings ? state.smoke.settings : {};
@@ -2093,15 +2234,51 @@
     setToast("主题已切换");
   }
 
+  function renderFeishuPushTimes(pushTimes) {
+    refs.feishuPushTimesList.replaceChildren();
+    normalizePushTimes(pushTimes).forEach((time) => {
+      appendFeishuPushTimeInput(time);
+    });
+  }
+
+  function appendFeishuPushTimeInput(value) {
+    const row = document.createElement("div");
+    row.className = "time-row";
+    const input = document.createElement("input");
+    input.className = "feishu-push-time-input";
+    input.type = "time";
+    input.value = normalizePushTime(value) || "09:00";
+    const remove = makeButton("删除", "danger small", () => {
+      if (refs.feishuPushTimesList.children.length <= 1) {
+        input.value = "09:00";
+        return;
+      }
+      row.remove();
+    });
+    row.append(input, remove);
+    refs.feishuPushTimesList.append(row);
+  }
+
+  function getFeishuPushTimesFromSettings() {
+    return normalizePushTimes(Array.from(refs.feishuPushTimesList.querySelectorAll(".feishu-push-time-input")).map((input) => input.value));
+  }
+
   async function saveMemoSettingsFromSettings() {
     state.config = await api.config.setMemoSettings({
       quickMemoEnterToSave: refs.quickMemoEnterToSaveInput.checked,
+      deadlineNotify: {
+        enabled: refs.deadlineNotifyEnabledInput.checked,
+        channels: {
+          macos: refs.deadlineNotifyMacosInput.checked,
+          feishu: refs.deadlineNotifyFeishuInput.checked
+        }
+      },
       feishu: {
         enabled: refs.feishuAutoPushInput.checked,
         webhookUrl: refs.feishuWebhookInput.value,
         secret: refs.feishuSecretInput.value,
         pushScope: refs.feishuPushScopeSelect.value,
-        pushTime: refs.feishuPushTimeInput.value
+        pushTimes: getFeishuPushTimesFromSettings()
       }
     });
     renderSettings();
@@ -2423,6 +2600,9 @@
     refs.importMemoButton.addEventListener("click", importMemoNotes);
     refs.exportMemoButton.addEventListener("click", exportMemoNotes);
     refs.saveMemoSampleButton.addEventListener("click", saveMemoImportSample);
+    refs.addFeishuPushTimeButton.addEventListener("click", () => {
+      appendFeishuPushTimeInput("09:00");
+    });
     refs.saveFeishuSettingsButton.addEventListener("click", async () => {
       refs.saveFeishuSettingsButton.disabled = true;
       try {
@@ -2443,6 +2623,17 @@
         renderSettings();
         setToast("备忘录设置保存失败：" + error.message, true);
       }
+    });
+    [refs.deadlineNotifyEnabledInput, refs.deadlineNotifyMacosInput, refs.deadlineNotifyFeishuInput].forEach((input) => {
+      input.addEventListener("change", async () => {
+        try {
+          await saveMemoSettingsFromSettings();
+        } catch (error) {
+          console.error(error);
+          renderSettings();
+          setToast("截止提醒设置保存失败：" + error.message, true);
+        }
+      });
     });
     refs.themeSelect.addEventListener("change", async () => {
       const previousTheme = normalizeTheme(state.config && state.config.theme);

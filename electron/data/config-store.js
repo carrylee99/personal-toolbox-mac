@@ -12,13 +12,22 @@ const DEFAULT_THEME = "natural";
 const VALID_FEISHU_PUSH_SCOPES = new Set(["all_pending", "today_created_pending"]);
 const DEFAULT_MEMO_SETTINGS = {
   quickMemoEnterToSave: true,
+  deadlineNotify: {
+    enabled: false,
+    channels: {
+      macos: true,
+      feishu: false
+    }
+  },
   feishu: {
     enabled: false,
     webhookUrl: "",
     secret: "",
     pushScope: "all_pending",
     pushTime: "09:00",
-    lastPushedDate: ""
+    pushTimes: ["09:00"],
+    lastPushedDate: "",
+    lastPushedTimes: []
   }
 };
 
@@ -87,24 +96,75 @@ class ConfigStore {
       quickMemoEnterToSave: Object.prototype.hasOwnProperty.call(memoSettings, "quickMemoEnterToSave")
         ? memoSettings.quickMemoEnterToSave !== false
         : DEFAULT_MEMO_SETTINGS.quickMemoEnterToSave,
+      deadlineNotify: this.normalizeDeadlineNotifySettings(memoSettings.deadlineNotify),
       feishu: this.normalizeFeishuSettings(memoSettings.feishu)
+    };
+  }
+
+  normalizeDeadlineNotifySettings(settings) {
+    const deadlineNotify = settings || {};
+    const channels = deadlineNotify.channels || {};
+    return {
+      enabled: deadlineNotify.enabled === true,
+      channels: {
+        macos: Object.prototype.hasOwnProperty.call(channels, "macos")
+          ? channels.macos !== false
+          : DEFAULT_MEMO_SETTINGS.deadlineNotify.channels.macos,
+        feishu: channels.feishu === true
+      }
     };
   }
 
   normalizeFeishuSettings(settings) {
     const feishu = settings || {};
     const pushScope = String(feishu.pushScope || "").trim();
-    const pushTime = /^\d{2}:\d{2}$/.test(String(feishu.pushTime || "").trim())
-      ? String(feishu.pushTime).trim()
-      : DEFAULT_MEMO_SETTINGS.feishu.pushTime;
+    const pushTimes = this.normalizeFeishuPushTimes(feishu);
     return {
       enabled: feishu.enabled === true,
       webhookUrl: typeof feishu.webhookUrl === "string" ? feishu.webhookUrl.trim() : DEFAULT_MEMO_SETTINGS.feishu.webhookUrl,
       secret: typeof feishu.secret === "string" ? feishu.secret.trim() : DEFAULT_MEMO_SETTINGS.feishu.secret,
       pushScope: VALID_FEISHU_PUSH_SCOPES.has(pushScope) ? pushScope : DEFAULT_MEMO_SETTINGS.feishu.pushScope,
-      pushTime,
-      lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate.trim() : DEFAULT_MEMO_SETTINGS.feishu.lastPushedDate
+      pushTime: pushTimes[0],
+      pushTimes,
+      lastPushedDate: typeof feishu.lastPushedDate === "string" ? feishu.lastPushedDate.trim() : DEFAULT_MEMO_SETTINGS.feishu.lastPushedDate,
+      lastPushedTimes: Array.isArray(feishu.lastPushedTimes) ? this.normalizeTimeList(feishu.lastPushedTimes) : DEFAULT_MEMO_SETTINGS.feishu.lastPushedTimes
     };
+  }
+
+  normalizeFeishuPushTimes(settings) {
+    const feishu = settings || {};
+    const candidates = Array.isArray(feishu.pushTimes) && feishu.pushTimes.length
+      ? feishu.pushTimes
+      : [feishu.pushTime || DEFAULT_MEMO_SETTINGS.feishu.pushTime];
+    const pushTimes = this.normalizeTimeList(candidates);
+    return pushTimes.length ? pushTimes : DEFAULT_MEMO_SETTINGS.feishu.pushTimes.slice();
+  }
+
+  normalizeTimeList(values) {
+    const seen = new Set();
+    const normalized = [];
+    (Array.isArray(values) ? values : []).forEach((value) => {
+      const time = this.normalizeTime(value);
+      if (time && !seen.has(time)) {
+        seen.add(time);
+        normalized.push(time);
+      }
+    });
+    return normalized;
+  }
+
+  normalizeTime(value) {
+    const time = String(value || "").trim();
+    const match = /^(\d{2}):(\d{2})$/.exec(time);
+    if (!match) {
+      return "";
+    }
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return "";
+    }
+    return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
   }
 
   async getConfig() {
@@ -151,6 +211,13 @@ class ConfigStore {
     const nextMemo = Object.assign({}, currentMemo);
     if (Object.prototype.hasOwnProperty.call(patch, "quickMemoEnterToSave")) {
       nextMemo.quickMemoEnterToSave = patch.quickMemoEnterToSave !== false;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "deadlineNotify")) {
+      const currentDeadlineNotify = currentMemo.deadlineNotify || {};
+      const patchDeadlineNotify = patch.deadlineNotify || {};
+      nextMemo.deadlineNotify = this.normalizeDeadlineNotifySettings(Object.assign({}, currentDeadlineNotify, patchDeadlineNotify, {
+        channels: Object.assign({}, currentDeadlineNotify.channels || {}, patchDeadlineNotify.channels || {})
+      }));
     }
     if (Object.prototype.hasOwnProperty.call(patch, "feishu")) {
       nextMemo.feishu = this.normalizeFeishuSettings(Object.assign({}, currentMemo.feishu, patch.feishu || {}));

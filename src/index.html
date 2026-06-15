@@ -227,6 +227,27 @@
                 </section>
                 <section class="settings-card panel">
                   <div class="setting-block-head">
+                    <strong>任务截止提醒</strong>
+                    <p>给每条备忘设置截止时间，到期后提醒一次。</p>
+                  </div>
+                  <label class="checkbox-field">
+                    <input id="deadlineNotifyEnabledInput" type="checkbox" />
+                    <span>任务截止时通知</span>
+                  </label>
+                  <div class="settings-grid-2">
+                    <label class="checkbox-field">
+                      <input id="deadlineNotifyMacosInput" type="checkbox" />
+                      <span>macOS 本地通知</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input id="deadlineNotifyFeishuInput" type="checkbox" />
+                      <span>飞书机器人通知</span>
+                    </label>
+                  </div>
+                  <p class="setting-help">飞书通知会复用下方机器人配置；如果未填写 Webhook，只会发送 macOS 本地通知。</p>
+                </section>
+                <section class="settings-card panel">
+                  <div class="setting-block-head">
                     <strong>飞书机器人</strong>
                     <p>把待办推送到你自己的飞书群机器人。</p>
                   </div>
@@ -246,10 +267,13 @@
                         <option value="today_created_pending">今日新增未完成待办</option>
                       </select>
                     </label>
-                    <label class="field">
-                      <span>自动推送时间</span>
-                      <input id="feishuPushTimeInput" type="time" value="09:00" />
-                    </label>
+                  </div>
+                  <div class="field">
+                    <span>自动推送时间点</span>
+                    <div id="feishuPushTimesList" class="time-list"></div>
+                    <div class="inline-actions">
+                      <button id="addFeishuPushTimeButton" type="button">新增时间</button>
+                    </div>
                   </div>
                   <label class="checkbox-field">
                     <input id="feishuAutoPushInput" type="checkbox" />
@@ -259,7 +283,7 @@
                     <button id="saveFeishuSettingsButton" class="primary" type="button">保存飞书设置</button>
                     <button id="testFeishuBotButton" type="button">测试机器人</button>
                   </div>
-                  <p class="setting-help">在飞书群添加自定义机器人后复制 Webhook；如果机器人开启签名校验，请同时填写签名密钥。</p>
+                  <p class="setting-help">在飞书群添加自定义机器人后复制 Webhook；可配置多个自动推送时间点，如果机器人开启签名校验，请同时填写签名密钥。</p>
                 </section>
                 <section class="settings-card panel">
                   <div class="inline-actions">
@@ -287,7 +311,9 @@
       "completed": false,
       "createdAt": "2026-06-10T09:00:00.000+08:00",
       "updatedAt": "2026-06-10T09:20:00.000+08:00",
-      "completedAt": null
+      "completedAt": null,
+      "dueAt": "2026-06-10T18:30:00.000+08:00",
+      "deadlineNotifiedAt": null
     }
   ]
 }</pre>

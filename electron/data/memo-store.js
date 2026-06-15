@@ -48,6 +48,19 @@ function parseTimestamp(value, fallback) {
   return fallback;
 }
 
+function parseOptionalTimestamp(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = parseTimestamp(value, null);
+  return parsed ? parsed : null;
+}
+
+function parseDueAt(value) {
+  const parsed = parseOptionalTimestamp(value);
+  return parsed ? Math.floor(parsed / 60000) * 60000 : null;
+}
+
 function normalizeNotePayload(value) {
   if (typeof value === "string") {
     return splitMemoContent(value);
@@ -56,7 +69,8 @@ function normalizeNotePayload(value) {
   if (Object.prototype.hasOwnProperty.call(payload, "title") || Object.prototype.hasOwnProperty.call(payload, "detail")) {
     return {
       title: cleanText(payload.title),
-      detail: normalizeDetail(payload.detail)
+      detail: normalizeDetail(payload.detail),
+      dueAt: Object.prototype.hasOwnProperty.call(payload, "dueAt") ? parseDueAt(payload.dueAt) : undefined
     };
   }
   return splitMemoContent(payload.content);
@@ -78,7 +92,9 @@ function normalizeNote(note) {
     createdAt,
     updatedAt,
     completed: Boolean(note && note.completed),
-    completedAt: note && note.completedAt ? parseTimestamp(note.completedAt, null) : null
+    completedAt: note && note.completedAt ? parseTimestamp(note.completedAt, null) : null,
+    dueAt: parseDueAt(note && note.dueAt),
+    deadlineNotifiedAt: parseOptionalTimestamp(note && note.deadlineNotifiedAt)
   };
 }
 
@@ -111,7 +127,9 @@ function getMemoImportSample() {
         completed: false,
         createdAt: "2026-06-10T09:00:00.000+08:00",
         updatedAt: "2026-06-10T09:20:00.000+08:00",
-        completedAt: null
+        completedAt: null,
+        dueAt: "2026-06-10T18:30:00.000+08:00",
+        deadlineNotifiedAt: null
       },
       {
         title: "整理今日待办",
@@ -119,7 +137,9 @@ function getMemoImportSample() {
         completed: true,
         createdAt: "2026-06-10T08:30:00.000+08:00",
         updatedAt: "2026-06-10T10:00:00.000+08:00",
-        completedAt: "2026-06-10T10:00:00.000+08:00"
+        completedAt: "2026-06-10T10:00:00.000+08:00",
+        dueAt: null,
+        deadlineNotifiedAt: null
       }
     ]
   }, null, 2) + "\n";
@@ -185,7 +205,9 @@ class MemoStore {
       createdAt: now,
       updatedAt: now,
       completed: false,
-      completedAt: null
+      completedAt: null,
+      dueAt: value.dueAt || null,
+      deadlineNotifiedAt: null
     });
     store.notes.push(note);
     await this.saveStore(store);
@@ -201,6 +223,9 @@ class MemoStore {
     const now = Date.now();
     note.completed = Boolean(completed);
     note.completedAt = note.completed ? now : null;
+    if (!note.completed && note.dueAt && note.dueAt > now) {
+      note.deadlineNotifiedAt = null;
+    }
     note.updatedAt = now;
     await this.saveStore(store);
     return normalizeNote(note);
@@ -217,7 +242,8 @@ class MemoStore {
       ? normalizeNotePayload(patch)
       : {
         title: Object.prototype.hasOwnProperty.call(patch || {}, "title") ? cleanText(patch.title) : normalizedNote.title,
-        detail: Object.prototype.hasOwnProperty.call(patch || {}, "detail") ? normalizeDetail(patch.detail) : normalizedNote.detail
+        detail: Object.prototype.hasOwnProperty.call(patch || {}, "detail") ? normalizeDetail(patch.detail) : normalizedNote.detail,
+        dueAt: Object.prototype.hasOwnProperty.call(patch || {}, "dueAt") ? parseDueAt(patch.dueAt) : undefined
       };
     if (!payload.title) {
       throw new Error("Note title is empty");
@@ -225,9 +251,37 @@ class MemoStore {
     note.title = payload.title;
     note.detail = payload.detail;
     note.content = buildMemoContent(note.title, note.detail);
+    if (Object.prototype.hasOwnProperty.call(payload, "dueAt") && payload.dueAt !== undefined) {
+      const previousDueAt = parseDueAt(note.dueAt);
+      note.dueAt = payload.dueAt;
+      if (previousDueAt !== note.dueAt) {
+        note.deadlineNotifiedAt = null;
+      }
+    }
     note.updatedAt = Date.now();
     await this.saveStore(store);
     return normalizeNote(note);
+  }
+
+  async markDeadlineNotified(ids, notifiedAt) {
+    const targetIds = new Set(Array.isArray(ids) ? ids : [ids]);
+    if (!targetIds.size) {
+      return [];
+    }
+    const store = await this.readStore();
+    const now = parseTimestamp(notifiedAt, Date.now());
+    const updated = [];
+    store.notes.forEach((note) => {
+      if (!targetIds.has(note.id)) {
+        return;
+      }
+      note.deadlineNotifiedAt = now;
+      updated.push(normalizeNote(note));
+    });
+    if (updated.length) {
+      await this.saveStore(store);
+    }
+    return updated;
   }
 
   async deleteNote(id) {

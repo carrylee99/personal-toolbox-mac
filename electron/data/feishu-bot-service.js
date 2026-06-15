@@ -114,6 +114,27 @@ function createTodoPayload(notes, options) {
   return createPostPayload("个人工具箱待办提醒", lines);
 }
 
+function createDeadlinePayload(notes, options) {
+  const now = options && options.now ? options.now : new Date();
+  const lines = [
+    "到期任务 " + notes.length + " 条 · " + formatLocalDateTime(now)
+  ];
+  notes.slice(0, MAX_TODO_ITEMS).forEach((note, index) => {
+    lines.push((index + 1) + ". " + getMemoTitle(note));
+    if (note && note.dueAt) {
+      lines.push("   截止时间：" + formatLocalDateTime(note.dueAt));
+    }
+    const detail = truncate(getMemoDetail(note), MAX_DETAIL_LENGTH);
+    if (detail) {
+      lines.push("   " + detail);
+    }
+  });
+  if (notes.length > MAX_TODO_ITEMS) {
+    lines.push("还有 " + (notes.length - MAX_TODO_ITEMS) + " 条未展示，请打开个人工具箱查看。");
+  }
+  return createPostPayload("个人工具箱任务截止提醒", lines);
+}
+
 function createTestPayload() {
   return createPostPayload("个人工具箱飞书机器人测试", [
     "配置验证成功。",
@@ -216,6 +237,15 @@ async function sendTodoNotes(settings, notes, options) {
   };
 }
 
+async function sendDeadlineReminders(settings, notes, options) {
+  const now = options && options.now ? options.now : new Date();
+  await sendFeishuMessage(settings, createDeadlinePayload(notes, { now }), now);
+  return {
+    noteCount: notes.length,
+    sentAt: now.toISOString()
+  };
+}
+
 async function sendTestMessage(settings) {
   const now = new Date();
   await sendFeishuMessage(settings, createTestPayload(), now);
@@ -227,6 +257,7 @@ async function sendTestMessage(settings) {
 module.exports = {
   filterTodoNotes,
   normalizePushScope,
+  sendDeadlineReminders,
   sendTodoNotes,
   sendTestMessage,
   toLocalDateKey

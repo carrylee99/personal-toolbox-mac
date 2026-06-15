@@ -1,11 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain } = require("electron");
+const { app, BrowserWindow, Notification, dialog, globalShortcut, ipcMain } = require("electron");
 const { ConfigStore } = require("./data/config-store");
 const { SmokeStore } = require("./data/smoke-store");
 const { MemoStore } = require("./data/memo-store");
 const { DailyPoemService } = require("./data/daily-poem-service");
-const { filterTodoNotes, sendTestMessage, sendTodoNotes, toLocalDateKey } = require("./data/feishu-bot-service");
+const { filterTodoNotes, sendDeadlineReminders, sendTestMessage, sendTodoNotes, toLocalDateKey } = require("./data/feishu-bot-service");
 
 app.setName("个人工具箱");
 app.setAppUserModelId("com.lixuhui.personal-toolbox");
@@ -25,6 +25,8 @@ let memoDataWatchPath = "";
 let memoDataWatchTimer = null;
 let feishuAutoPushTimer = null;
 let feishuAutoPushRunning = false;
+let memoDeadlineTimer = null;
+let memoDeadlineRunning = false;
 
 function sanitizeExportFileName(value) {
   return String(value || "冒烟记录")
@@ -41,6 +43,25 @@ function todayKey() {
 function currentMinuteKey() {
   const now = new Date();
   return [String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0")].join(":");
+}
+
+function currentMinuteTimestamp() {
+  return Math.floor(Date.now() / 60000) * 60000;
+}
+
+function formatLocalDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return [
+    [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0")
+    ].join("-"),
+    [String(date.getHours()).padStart(2, "0"), String(date.getMinutes()).padStart(2, "0")].join(":")
+  ].join(" ");
 }
 
 function notifyMemoChanged() {
@@ -102,6 +123,57 @@ function getFeishuSettings(config) {
   return config && config.memo && config.memo.feishu ? config.memo.feishu : {};
 }
 
+function getDeadlineNotifySettings(config) {
+  const settings = config && config.memo && config.memo.deadlineNotify ? config.memo.deadlineNotify : {};
+  const channels = settings.channels || {};
+  return {
+    enabled: settings.enabled === true,
+    channels: {
+      macos: channels.macos !== false,
+      feishu: channels.feishu === true
+    }
+  };
+}
+
+function getMemoTitle(note) {
+  const title = String((note && note.title) || "").trim();
+  if (title) {
+    return title;
+  }
+  return String((note && note.content) || "").split(/\r?\n/)[0].trim() || "未命名备忘";
+}
+
+function getMemoDetail(note) {
+  if (typeof (note && note.detail) === "string") {
+    return note.detail.trim();
+  }
+  const lines = String((note && note.content) || "").replace(/\r\n/g, "\n").split("\n");
+  lines.shift();
+  return lines.join("\n").trim();
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").trim().replace(/\s*\n+\s*/g, " / ");
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.slice(0, maxLength - 1) + "...";
+}
+
+function getFeishuPushTimes(feishu) {
+  if (Array.isArray(feishu && feishu.pushTimes) && feishu.pushTimes.length) {
+    return feishu.pushTimes;
+  }
+  return feishu && feishu.pushTime ? [feishu.pushTime] : [];
+}
+
+function getFeishuPushedTimesForDate(feishu, dateKey) {
+  if (!feishu || feishu.lastPushedDate !== dateKey) {
+    return [];
+  }
+  return Array.isArray(feishu.lastPushedTimes) ? feishu.lastPushedTimes : [];
+}
+
 async function pushMemoTodosToFeishu(trigger) {
   const config = await configStore.getConfig();
   const feishu = getFeishuSettings(config);
@@ -129,17 +201,96 @@ async function checkFeishuAutoPush() {
     const config = await configStore.getConfig();
     const feishu = getFeishuSettings(config);
     const today = todayKey();
-    if (!feishu.enabled || !feishu.webhookUrl || feishu.lastPushedDate === today || feishu.pushTime !== currentMinuteKey()) {
+    const currentTime = currentMinuteKey();
+    const pushTimes = getFeishuPushTimes(feishu);
+    const pushedTimes = getFeishuPushedTimesForDate(feishu, today);
+    if (!feishu.enabled || !feishu.webhookUrl || !pushTimes.includes(currentTime) || pushedTimes.includes(currentTime)) {
       return;
     }
     const result = await pushMemoTodosToFeishu("auto");
     if (!result.skipped) {
-      await configStore.setMemoSettings({ feishu: { lastPushedDate: today } });
+      await configStore.setMemoSettings({ feishu: { lastPushedDate: today, lastPushedTimes: pushedTimes.concat(currentTime) } });
     }
   } catch (error) {
     console.error("Failed to auto push memo todos to Feishu", error);
   } finally {
     feishuAutoPushRunning = false;
+  }
+}
+
+function getDueReminderNotes(notes) {
+  const nowMinute = currentMinuteTimestamp();
+  return (Array.isArray(notes) ? notes : []).filter((note) => {
+    if (!note || note.completed || !note.dueAt || note.deadlineNotifiedAt) {
+      return false;
+    }
+    return Number(note.dueAt) <= nowMinute;
+  });
+}
+
+function showMacosDeadlineNotification(notes) {
+  if (!Notification.isSupported() || !notes.length) {
+    return false;
+  }
+  const first = notes[0];
+  const title = notes.length === 1 ? "任务到期：" + getMemoTitle(first) : "有 " + notes.length + " 个任务到期";
+  const bodyLines = notes.length === 1
+    ? [
+      "截止时间：" + formatLocalDateTime(first.dueAt),
+      truncateText(getMemoDetail(first), 90)
+    ].filter(Boolean)
+    : notes.slice(0, 5).map((note, index) => (index + 1) + ". " + getMemoTitle(note));
+  const notification = new Notification({
+    title,
+    body: bodyLines.join("\n"),
+    silent: false
+  });
+  notification.show();
+  return true;
+}
+
+async function checkMemoDeadlineNotifications() {
+  if (memoDeadlineRunning || !configStore || !memoStore) {
+    return;
+  }
+  memoDeadlineRunning = true;
+  try {
+    const config = await configStore.getConfig();
+    const deadlineNotify = getDeadlineNotifySettings(config);
+    if (!deadlineNotify.enabled) {
+      return;
+    }
+    const notes = getDueReminderNotes(await memoStore.listNotes());
+    if (!notes.length) {
+      return;
+    }
+    let notified = false;
+    if (deadlineNotify.channels.macos) {
+      try {
+        notified = showMacosDeadlineNotification(notes) || notified;
+      } catch (error) {
+        console.error("Failed to show memo deadline notification", error);
+      }
+    }
+    if (deadlineNotify.channels.feishu) {
+      const feishu = getFeishuSettings(config);
+      if (feishu.webhookUrl) {
+        try {
+          await sendDeadlineReminders(feishu, notes, { now: new Date() });
+          notified = true;
+        } catch (error) {
+          console.error("Failed to send memo deadline reminder to Feishu", error);
+        }
+      }
+    }
+    if (notified) {
+      await memoStore.markDeadlineNotified(notes.map((note) => note.id), Date.now());
+      notifyMemoChanged();
+    }
+  } catch (error) {
+    console.error("Failed to check memo deadline notifications", error);
+  } finally {
+    memoDeadlineRunning = false;
   }
 }
 
@@ -151,10 +302,25 @@ function startFeishuAutoPushTimer() {
   checkFeishuAutoPush();
 }
 
+function startMemoDeadlineTimer() {
+  if (memoDeadlineTimer) {
+    clearInterval(memoDeadlineTimer);
+  }
+  memoDeadlineTimer = setInterval(checkMemoDeadlineNotifications, 60 * 1000);
+  checkMemoDeadlineNotifications();
+}
+
 function stopFeishuAutoPushTimer() {
   if (feishuAutoPushTimer) {
     clearInterval(feishuAutoPushTimer);
     feishuAutoPushTimer = null;
+  }
+}
+
+function stopMemoDeadlineTimer() {
+  if (memoDeadlineTimer) {
+    clearInterval(memoDeadlineTimer);
+    memoDeadlineTimer = null;
   }
 }
 
@@ -260,6 +426,7 @@ function registerIpcHandlers() {
   });
   ipcMain.handle("config:setMemoSettings", async (_event, settings) => {
     const config = await configStore.setMemoSettings(settings);
+    checkMemoDeadlineNotifications();
     return Object.assign({}, config, { configPath: configStore.configPath });
   });
   ipcMain.handle("config:selectVaultPath", async () => {
@@ -337,16 +504,19 @@ function registerIpcHandlers() {
   ipcMain.handle("memo:createNote", async (_event, content) => {
     const note = await memoStore.createNote(content);
     notifyMemoChanged();
+    checkMemoDeadlineNotifications();
     return note;
   });
   ipcMain.handle("memo:updateNote", async (_event, noteId, content) => {
     const note = await memoStore.updateNote(noteId, content);
     notifyMemoChanged();
+    checkMemoDeadlineNotifications();
     return note;
   });
   ipcMain.handle("memo:toggleNote", async (_event, noteId, completed) => {
     const note = await memoStore.toggleNote(noteId, completed);
     notifyMemoChanged();
+    checkMemoDeadlineNotifications();
     return note;
   });
   ipcMain.handle("memo:deleteNote", async (_event, noteId) => {
@@ -369,6 +539,7 @@ function registerIpcHandlers() {
     }
     const summary = await memoStore.importNotes(result.filePaths[0]);
     notifyMemoChanged();
+    checkMemoDeadlineNotifications();
     return Object.assign({ canceled: false }, summary);
   });
   ipcMain.handle("memo:exportNotes", async () => {
@@ -571,6 +742,7 @@ app.whenReady().then(() => {
   createWindow();
   startMemoDataWatcher();
   startFeishuAutoPushTimer();
+  startMemoDeadlineTimer();
   registerConfiguredShortcuts();
 
   app.on("activate", () => {
@@ -592,5 +764,6 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   stopMemoDataWatcher();
   stopFeishuAutoPushTimer();
+  stopMemoDeadlineTimer();
   globalShortcut.unregisterAll();
 });
