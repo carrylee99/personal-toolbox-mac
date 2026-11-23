@@ -2,7 +2,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const NOTE_PREFIX = "memo/note/";
-const EXPORT_SCHEMA_VERSION = 1;
+const EXPORT_SCHEMA_VERSION = 2;
+const GROUP_COLORS = ["#9bafff", "#80d2aa", "#e9c27d", "#c0a6ef", "#e6a8c4", "#86cbd8", "#a1a3ae"];
 
 function createId(prefix) {
   return prefix + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
@@ -70,6 +71,7 @@ function normalizeNotePayload(value) {
     return {
       title: cleanText(payload.title),
       detail: normalizeDetail(payload.detail),
+      groupId: Object.prototype.hasOwnProperty.call(payload, "groupId") ? cleanText(payload.groupId) : undefined,
       dueAt: Object.prototype.hasOwnProperty.call(payload, "dueAt") ? parseDueAt(payload.dueAt) : undefined
     };
   }
@@ -88,6 +90,7 @@ function normalizeNote(note) {
     id: note && note.id ? String(note.id) : note && note._id ? String(note._id) : createId(NOTE_PREFIX),
     title,
     detail,
+    groupId: cleanText(note && note.groupId),
     content: buildMemoContent(title, detail),
     createdAt,
     updatedAt,
@@ -101,6 +104,7 @@ function normalizeNote(note) {
 function normalizeStore(raw) {
   const store = raw || {};
   return {
+    groups: Array.isArray(store.groups) ? store.groups.map((group) => ({ id: String(group.id), name: cleanText(group.name), color: GROUP_COLORS.includes(group.color) ? group.color : GROUP_COLORS[0], pinned: group.pinned !== false })) : [],
     notes: Array.isArray(store.notes) ? store.notes.map(normalizeNote) : []
   };
 }
@@ -112,6 +116,7 @@ function getImportNotesPayload(raw) {
     };
   }
   return {
+    groups: Array.isArray(raw && raw.groups) ? raw.groups : [],
     notes: Array.isArray(raw && raw.notes) ? raw.notes : []
   };
 }
@@ -182,13 +187,77 @@ class MemoStore {
     const dataPath = await this.getDataPath();
     const normalized = normalizeStore(store);
     await fs.mkdir(path.dirname(dataPath), { recursive: true });
-    await fs.writeFile(dataPath, JSON.stringify(normalized, null, 2) + "\n", "utf8");
+    const temporaryPath = dataPath + ".tmp-" + process.pid;
+    try {
+      // 完整写入临时文件后再替换；磁盘写入失败时，原待办文件仍然可读。
+      await fs.writeFile(temporaryPath, JSON.stringify(normalized, null, 2) + "\n", "utf8");
+      await fs.rename(temporaryPath, dataPath);
+    } catch (error) {
+      try {
+        await fs.unlink(temporaryPath);
+      } catch (cleanupError) {
+        if (cleanupError.code !== "ENOENT") {
+          console.warn("Failed to remove incomplete memo file", cleanupError);
+        }
+      }
+      throw error;
+    }
     return normalized;
   }
 
   async listNotes() {
     const store = await this.readStore();
     return sortNotes(store.notes);
+  }
+
+  async listData() {
+    const store = await this.readStore();
+    return { notes: sortNotes(store.notes), groups: store.groups };
+  }
+
+  validateGroupId(store, id) {
+    const groupId = cleanText(id);
+    if (groupId && !store.groups.some((group) => group.id === groupId)) {
+      throw new Error("该分组已不存在，请重新选择分组");
+    }
+    return groupId;
+  }
+
+  async saveGroup(payload) {
+    const store = await this.readStore();
+    const name = cleanText(payload?.name).normalize("NFC");
+    if (!name || [...name].length > 24 || /[\r\n\t]/.test(name)) throw new Error("分组名称须为 1–24 个字符，不能包含换行");
+    if (["全部", "未分组"].includes(name)) throw new Error("请使用系统分组以外的名称");
+    if (store.groups.some((group) => group.id !== payload.id && group.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("该分组名称已存在");
+    if (payload.color && !GROUP_COLORS.includes(payload.color)) throw new Error("请选择有效的分组颜色");
+    let group = payload.id ? store.groups.find((item) => item.id === payload.id) : null;
+    if (payload.id && !group) throw new Error("该分组已不存在");
+    if (!group) {
+      group = { id: createId("memo/group/") };
+      store.groups.push(group);
+    }
+    Object.assign(group, { name, color: payload.color || GROUP_COLORS[0], pinned: payload.pinned !== false });
+    await this.saveStore(store);
+    return group;
+  }
+
+  async moveGroup(id, direction) {
+    if (!["up", "down"].includes(direction)) throw new Error("无效的排序方向");
+    const store = await this.readStore();
+    const index = store.groups.findIndex((group) => group.id === id);
+    if (index < 0) throw new Error("该分组已不存在");
+    const target = index + (direction === "up" ? -1 : 1);
+    if (target < 0 || target >= store.groups.length) return;
+    [store.groups[index], store.groups[target]] = [store.groups[target], store.groups[index]];
+    await this.saveStore(store);
+  }
+
+  async deleteGroup(id) {
+    const store = await this.readStore();
+    store.groups = store.groups.filter((group) => group.id !== id);
+    // 分组与任务归属一次落盘，避免删组后留下孤儿；不修改更新时间，以免唤醒延期任务。
+    store.notes.forEach((note) => { if (note.groupId === id) note.groupId = ""; });
+    await this.saveStore(store);
   }
 
   async createNote(payload) {
@@ -202,6 +271,7 @@ class MemoStore {
       id: createId(NOTE_PREFIX),
       title: value.title,
       detail: value.detail,
+      groupId: this.validateGroupId(store, value.groupId),
       createdAt: now,
       updatedAt: now,
       completed: false,
@@ -243,11 +313,13 @@ class MemoStore {
       : {
         title: Object.prototype.hasOwnProperty.call(patch || {}, "title") ? cleanText(patch.title) : normalizedNote.title,
         detail: Object.prototype.hasOwnProperty.call(patch || {}, "detail") ? normalizeDetail(patch.detail) : normalizedNote.detail,
+        groupId: Object.prototype.hasOwnProperty.call(patch || {}, "groupId") ? this.validateGroupId(store, patch.groupId) : undefined,
         dueAt: Object.prototype.hasOwnProperty.call(patch || {}, "dueAt") ? parseDueAt(patch.dueAt) : undefined
       };
     if (!payload.title) {
       throw new Error("Note title is empty");
     }
+    if (payload.groupId !== undefined) note.groupId = payload.groupId;
     note.title = payload.title;
     note.detail = payload.detail;
     note.content = buildMemoContent(note.title, note.detail);
@@ -298,6 +370,19 @@ class MemoStore {
     const raw = JSON.parse(await fs.readFile(filePath, "utf8"));
     const payload = getImportNotesPayload(raw);
     const store = await this.readStore();
+    // 备份带组定义；旧版仅含 notes 的备份仍能导入，更新同 ID 时保留原归属。
+    const groupIds = new Map();
+    for (const imported of payload.groups || []) {
+      const name = cleanText(imported?.name).normalize("NFC");
+      if (!imported?.id || !name || [...name].length > 24 || /[\r\n\t]/.test(name) || ["全部", "未分组"].includes(name)) throw new Error("导入文件包含无效分组，请检查名称和 ID");
+      let group = store.groups.find((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+      if (!group) {
+        const id = (String(imported.id) === "all" || store.groups.some((item) => item.id === String(imported.id))) ? createId("memo/group/") : String(imported.id);
+        group = { id, name, color: GROUP_COLORS.includes(imported.color) ? imported.color : GROUP_COLORS[0], pinned: imported.pinned !== false };
+        store.groups.push(group);
+      }
+      groupIds.set(String(imported.id), group.id);
+    }
     const existingById = new Map(store.notes.map((note) => [note.id, note]));
     let createdCount = 0;
     let updatedCount = 0;
@@ -310,6 +395,9 @@ class MemoStore {
         return;
       }
       const existing = existingById.get(note.id);
+      note.groupId = Object.prototype.hasOwnProperty.call(item, "groupId")
+        ? groupIds.get(String(item.groupId)) || (store.groups.some((group) => group.id === item.groupId) ? item.groupId : "")
+        : existing?.groupId || "";
       if (existing) {
         Object.assign(existing, note);
         updatedCount += 1;
@@ -335,6 +423,7 @@ class MemoStore {
     const payload = {
       schemaVersion: EXPORT_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
+      groups: store.groups,
       notes: sortNotes(store.notes)
     };
     await fs.mkdir(path.dirname(filePath), { recursive: true });

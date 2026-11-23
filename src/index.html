@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -7,8 +7,11 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: file:; connect-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>个人工具箱</title>
+    <title>记性不好</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./memo-groups.css" />
+    <link rel="stylesheet" href="./design-tokens.css" />
+    <link rel="stylesheet" href="./desktop.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -16,16 +19,17 @@
         <div class="brand">
           <img src="../assets/logo.png" alt="" />
           <div>
-            <h1>个人工具箱</h1>
+            <h1>记性不好</h1>
             <p id="vaultLabel">Vault 未连接</p>
           </div>
         </div>
         <button id="sidebarToggleButton" class="sidebar-toggle" type="button" aria-label="收起侧栏" title="收起侧栏">‹</button>
         <nav class="module-nav" aria-label="模块导航">
-          <button class="nav-button is-active" type="button" data-module="dashboard" data-icon="⌂" aria-label="主面板" title="主面板"><span class="nav-label">主面板</span></button>
-          <button class="nav-button" type="button" data-module="memo" data-icon="✎" aria-label="每日备忘" title="每日备忘"><span class="nav-label">每日备忘</span></button>
-          <button class="nav-button" type="button" data-module="smoke" data-icon="✓" aria-label="冒烟记录" title="冒烟记录"><span class="nav-label">冒烟记录</span></button>
-          <button class="nav-button" type="button" data-module="settings" data-icon="⚙" aria-label="设置" title="设置"><span class="nav-label">设置</span></button>
+          <button class="nav-button is-active" type="button" data-module="dashboard" aria-label="主面板" title="主面板"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="nav-label">主面板</span></button>
+          <button class="nav-button" type="button" data-module="memo" aria-label="每日备忘" title="每日备忘"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span class="nav-label">每日备忘</span></button>
+          <button class="nav-button" type="button" data-module="textDiff" aria-label="文本对比" title="文本对比"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></svg><span class="nav-label">文本对比</span></button>
+          <button class="nav-button" type="button" data-module="smoke" aria-label="冒烟记录" title="冒烟记录"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10"/></svg><span class="nav-label">冒烟记录</span></button>
+          <button class="nav-button" type="button" data-module="settings" aria-label="设置" title="设置"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg><span class="nav-label">设置</span></button>
         </nav>
       </aside>
 
@@ -137,10 +141,94 @@
           </header>
 
           <section id="memoListView" class="memo-view is-active">
+            <div id="memoGroups"></div>
+            <nav class="memo-subtabs" role="tablist" aria-label="备忘分类">
+              <button class="is-active" type="button" data-memo-tab="all">待办</button>
+              <button type="button" data-memo-tab="delayed">延期处理 <span id="memoDelayedCount" class="memo-tab-count">0</span></button>
+            <button type="button" data-memo-tab="done">已完成</button>
+            </nav>
+            <div id="memoCompletedFilters" class="memo-completed-filters" role="group" aria-label="完成时间筛选" hidden>
+              <button type="button" data-completed-filter="all" aria-pressed="true">全部完成</button>
+              <button type="button" data-completed-filter="last-week" aria-pressed="false">上周完成</button>
+              <span id="memoCompletedRange" aria-live="polite"></span>
+            </div>
             <form id="memoForm" class="memo-composer">
-              <input id="memoInput" type="text" placeholder="新建备忘标题" autocomplete="off" />
+              <input id="memoInput" type="text" placeholder="新建备忘标题" aria-label="新建备忘标题" autocomplete="off" />
             </form>
             <div id="memoList" class="memo-list"></div>
+          </section>
+        </section>
+
+        <section id="textDiffModule" class="module text-diff-module" aria-label="文本对比">
+          <header class="module-head">
+            <div>
+              <h2>文本对比</h2>
+              <p id="textDiffSummary">粘贴左右文本开始对比</p>
+            </div>
+            <div class="module-actions">
+              <button id="swapTextDiffButton" type="button">交换左右</button>
+              <button id="clearTextDiffButton" type="button">清空</button>
+              <button id="copyTextDiffButton" class="primary" type="button">复制统一 diff</button>
+            </div>
+          </header>
+
+          <section class="text-diff-toolbar panel">
+            <label class="field">
+              <span>对比粒度</span>
+              <select id="textDiffModeSelect">
+                <option value="line">按行</option>
+                <option value="word">按词</option>
+                <option value="char">按字符</option>
+              </select>
+            </label>
+            <label class="checkbox-field">
+              <input id="textDiffIgnoreWhitespaceInput" type="checkbox" checked />
+              <span>忽略空白</span>
+            </label>
+            <label class="checkbox-field">
+              <input id="textDiffIgnoreCaseInput" type="checkbox" checked />
+              <span>忽略大小写</span>
+            </label>
+            <label class="checkbox-field">
+              <input id="textDiffStripCrInput" type="checkbox" checked />
+              <span>忽略 Windows 换行符</span>
+            </label>
+            <div class="text-diff-stats" aria-label="差异统计">
+              <span id="textDiffAddedCount">新增 0</span>
+              <span id="textDiffRemovedCount">删除 0</span>
+              <span id="textDiffChangedCount">变更 0</span>
+            </div>
+          </section>
+
+          <div class="text-diff-workspace">
+            <label class="panel text-diff-editor">
+              <span>原文本</span>
+              <textarea id="textDiffLeftInput" spellcheck="false" placeholder="粘贴原文本"></textarea>
+              <small id="textDiffLeftMeta">0 字符 · 0 行</small>
+            </label>
+            <label class="panel text-diff-editor">
+              <span>新文本</span>
+              <textarea id="textDiffRightInput" spellcheck="false" placeholder="粘贴新文本"></textarea>
+              <small id="textDiffRightMeta">0 字符 · 0 行</small>
+            </label>
+          </div>
+
+          <section class="panel text-diff-output">
+            <div class="text-diff-output-head">
+              <h3>差异结果</h3>
+              <div class="text-diff-output-actions">
+                <div class="text-diff-navigation" aria-label="差异导航">
+                  <button id="textDiffPreviousButton" class="small" type="button" aria-label="定位到上一个差异">上一个差异</button>
+                  <span id="textDiffPosition" aria-live="polite">0 / 0</span>
+                  <button id="textDiffNextButton" class="small primary" type="button" aria-label="定位到下一个差异">下一个差异</button>
+                </div>
+                <div class="segmented-control" role="tablist" aria-label="对比视图">
+                  <button id="textDiffSplitViewButton" class="is-active" type="button" data-text-diff-view="split">左右对比</button>
+                  <button id="textDiffUnifiedViewButton" type="button" data-text-diff-view="unified">统一视图</button>
+                </div>
+              </div>
+            </div>
+            <div id="textDiffResult" class="text-diff-result" aria-live="polite"></div>
           </section>
         </section>
 
@@ -148,57 +236,65 @@
           <header class="module-head">
             <div>
               <h2>设置</h2>
-              <p>常规、备忘录、冒烟记录</p>
+              <p>按你的习惯，安排工具的工作方式</p>
             </div>
           </header>
           <div class="settings-layout">
-            <nav class="settings-tabs" role="tablist" aria-label="设置分类">
-              <button class="is-active" type="button" data-settings-tab="general">常规</button>
-              <button type="button" data-settings-tab="memo">备忘录</button>
-              <button type="button" data-settings-tab="smoke">冒烟记录</button>
-            </nav>
-
-            <div class="settings-content">
-              <section id="settingsGeneralTab" class="settings-pane is-active">
-                <section class="settings-card panel">
-                  <label class="field">
-                    <span>数据根目录</span>
-                    <input id="vaultPathInput" type="text" autocomplete="off" />
+<nav class="settings-tabs" role="tablist" aria-label="设置分类" aria-orientation="vertical">
+<button type="button" data-settings-tab="general" role="tab">常规</button>
+<button type="button" data-settings-tab="appearance" role="tab">外观</button>
+<button type="button" data-settings-tab="shortcuts" role="tab">快捷键</button>
+<button type="button" data-settings-tab="memo" role="tab">备忘提醒</button>
+<button type="button" data-settings-tab="data" role="tab">数据配置</button>
+</nav><div class="settings-content">
+<section class="settings-pane" data-settings-pane="general" role="tabpanel" aria-label="常规"><h3 class="settings-section-title">常规</h3><section class="settings-card panel">
+  <div class="setting-block-head"><strong>刘海待办</strong><p>把当前要做的事，留在视线之上。</p></div>
+  <label class="checkbox-field"><input id="notchEnabledInput" type="checkbox" /><span>启用所有屏幕的顶部待办入口</span></label>
+  <label class="field"><span>悬停展开时间（秒）</span><input id="notchHoverDelayInput" type="number" min="0" max="10" step="0.1" required aria-describedby="notchHoverDelayHelp notchHoverDelayStatus" /></label>
+  <div class="inline-actions"><button id="saveNotchHoverDelayButton" class="primary" type="button">保存悬停时间</button><button id="previewNotchButton" type="button">展开刘海</button></div>
+  <p id="notchHoverDelayHelp" class="setting-help">默认 2 秒，可设置 0–10 秒。连续悬停后展开，提前移开会取消；0 秒立即展开，快捷键不受等待时间影响。</p>
+  <p id="notchHoverDelayStatus" class="setting-help" role="status" aria-live="polite"></p>
+  <p class="setting-help">平时完全隐藏，移到任一屏幕最上沿正中，停留达到设定时间后展开；快捷键在鼠标所在屏幕展开。移出后收起，关闭主窗口后仍可使用；仅展示普通未完成待办，不包含延期处理。</p>
+</section>
+<section class="settings-card panel">
+                  <label class="checkbox-field">
+                    <input id="openAtLoginInput" type="checkbox" />
+                    <span>开机自启动</span>
                   </label>
-                  <div class="inline-actions">
-                    <button id="saveVaultPathButton" class="primary" type="button">保存路径</button>
-                    <button id="chooseVaultPathButton" type="button">选择目录</button>
-                  </div>
-                  <dl class="path-list">
-                    <div>
-                      <dt>配置文件</dt>
-                      <dd id="configDataPathText">-</dd>
-                    </div>
-                    <div>
-                      <dt>数据根目录</dt>
-                      <dd id="vaultRootPathText">-</dd>
-                    </div>
-                    <div>
-                      <dt>备忘数据</dt>
-                      <dd id="memoDataPathText">-</dd>
-                    </div>
-                    <div>
-                      <dt>冒烟数据</dt>
-                      <dd id="smokeDataPathText">-</dd>
-                    </div>
-                  </dl>
+                  <p class="setting-help">开启后，登录 macOS 时会自动启动记性不好。当前版本不会隐藏启动窗口。</p>
                 </section>
-                <section class="settings-card panel">
+<section class="settings-card panel"><div class="setting-block-head"><strong>极速备忘</strong></div><label class="checkbox-field">
+                    <input id="quickMemoEnterToSaveInput" type="checkbox" />
+                    <span>极速备忘使用 Enter 快捷保存</span>
+                  </label>
+                  <p class="setting-help">开启后 Enter 保存，Shift + Enter 换行；Ctrl + Enter 或 Command + Enter 会保存，并把首行写入标题、后续内容写入详情。</p>
+                  <label class="field">
+                    <span>截止时间识别符</span>
+                    <input id="quickMemoDateSeparatorInput" type="text" maxlength="16" autocomplete="off" spellcheck="false" aria-describedby="quickMemoDateSeparatorHelp quickMemoDateSeparatorStatus" />
+                  </label>
+                  <p id="quickMemoDateSeparatorHelp" class="setting-help">输入 --- 后接时间，自动设置截止日期。支持 1–16 个字符，不含空格。</p>
+                  <div class="inline-actions">
+                    <button id="saveQuickMemoDateSeparatorButton" class="primary" type="button">保存识别符</button>
+                    <button id="resetQuickMemoDateSeparatorButton" type="button">恢复默认</button>
+                  </div>
+                  <p id="quickMemoDateSeparatorStatus" class="setting-help" role="status" aria-live="polite"></p>
+                  <label class="field"><span>分组识别符</span><input id="quickMemoGroupSeparatorInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" aria-describedby="quickMemoGroupSeparatorHelp groupSeparatorStatus" /></label>
+                  <p id="quickMemoGroupSeparatorHelp" class="setting-help">在标题首行输入识别符选择分组；支持 1–8 个符号，不能与截止时间识别符互相包含。</p>
+                  <div class="settings-actions"><button id="saveGroupSeparator" type="button">保存分组识别符</button><button id="resetGroupSeparator" type="button">恢复为 #</button></div>
+                  <p id="groupSeparatorStatus" class="setting-help" role="status"></p>
+                </section></section>
+<section class="settings-pane" data-settings-pane="appearance" role="tabpanel" aria-label="外观"><h3 class="settings-section-title">外观</h3><section class="settings-card panel">
                   <label class="field">
                     <span>主题样式</span>
                     <select id="themeSelect">
+                      <option value="dark">精致深色</option>
                       <option value="natural">清新自然</option>
                       <option value="classic">经典蓝色</option>
                     </select>
                   </label>
-                  <p class="setting-help">切换后立即生效，并同步影响主窗口和后续打开的极速备忘。</p>
-                </section>
-                <section class="settings-card panel">
+                  <p class="setting-help">切换后立即生效，主窗口与极速备忘使用相同外观；刘海始终保持黑色。</p>
+                </section></section>
+<section class="settings-pane" data-settings-pane="shortcuts" role="tabpanel" aria-label="快捷键"><h3 class="settings-section-title">快捷键</h3><section class="settings-card panel">
                   <label class="field">
                     <span>打开主窗口</span>
                     <input id="openMainShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
@@ -208,10 +304,7 @@
                   </div>
                   <p class="setting-help">点击输入框后按下组合键。打开主窗口会唤起完整 App。</p>
                 </section>
-              </section>
-
-              <section id="settingsMemoTab" class="settings-pane">
-                <section class="settings-card panel">
+<section class="settings-card panel">
                   <label class="field">
                     <span>极速备忘快捷键</span>
                     <input id="quickMemoShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" />
@@ -219,13 +312,13 @@
                   <div class="inline-actions">
                     <button id="saveQuickMemoShortcutButton" class="primary" type="button">保存快捷键</button>
                   </div>
-                  <label class="checkbox-field">
-                    <input id="quickMemoEnterToSaveInput" type="checkbox" />
-                    <span>极速备忘使用 Enter 快捷保存</span>
-                  </label>
-                  <p class="setting-help">开启后 Enter 保存，Shift + Enter 换行；Ctrl + Enter 或 Command + Enter 会保存，并把首行写入标题、后续内容写入详情。</p>
-                </section>
-                <section class="settings-card panel">
+                  <p class="setting-help">点击输入框后按下组合键，随时呼出快速记录窗口。</p></section>
+<section class="settings-card panel">
+  <label class="field"><span>展开 / 收起刘海待办</span><input id="notchShortcutInput" class="shortcut-input" type="text" readonly autocomplete="off" /></label>
+  <div class="inline-actions"><button id="saveNotchShortcutButton" class="primary" type="button">保存快捷键</button></div>
+  <p class="setting-help">默认 ⌥ T。再次按下、按 Esc 或点击外部收起；鼠标进入后移出也会收起。</p>
+</section></section>
+<section class="settings-pane" data-settings-pane="memo" role="tabpanel" aria-label="备忘提醒"><h3 class="settings-section-title">备忘提醒</h3><section class="settings-card panel">
                   <div class="setting-block-head">
                     <strong>任务截止提醒</strong>
                     <p>给每条备忘设置截止时间，到期后提醒一次。</p>
@@ -246,7 +339,7 @@
                   </div>
                   <p class="setting-help">飞书通知会复用下方机器人配置；如果未填写 Webhook，只会发送 macOS 本地通知。</p>
                 </section>
-                <section class="settings-card panel">
+<section class="settings-card panel">
                   <div class="setting-block-head">
                     <strong>飞书机器人</strong>
                     <p>把待办推送到你自己的飞书群机器人。</p>
@@ -284,8 +377,36 @@
                     <button id="testFeishuBotButton" type="button">测试机器人</button>
                   </div>
                   <p class="setting-help">在飞书群添加自定义机器人后复制 Webhook；可配置多个自动推送时间点，如果机器人开启签名校验，请同时填写签名密钥。</p>
+                </section></section>
+<section class="settings-pane" data-settings-pane="data" role="tabpanel" aria-label="数据配置"><h3 class="settings-section-title">数据配置</h3><section class="settings-card panel">
+                  <label class="field">
+                    <span>数据根目录</span>
+                    <input id="vaultPathInput" type="text" autocomplete="off" />
+                  </label>
+                  <div class="inline-actions">
+                    <button id="saveVaultPathButton" class="primary" type="button">保存路径</button>
+                    <button id="chooseVaultPathButton" type="button">选择目录</button>
+                  </div>
+                  <dl class="path-list">
+                    <div>
+                      <dt>配置文件</dt>
+                      <dd id="configDataPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>数据根目录</dt>
+                      <dd id="vaultRootPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>备忘数据</dt>
+                      <dd id="memoDataPathText">-</dd>
+                    </div>
+                    <div>
+                      <dt>冒烟数据</dt>
+                      <dd id="smokeDataPathText">-</dd>
+                    </div>
+                  </dl>
                 </section>
-                <section class="settings-card panel">
+<section class="settings-card panel">
                   <div class="inline-actions">
                     <button id="importMemoButton" type="button">导入备忘录</button>
                     <button id="exportMemoButton" type="button">导出备忘录</button>
@@ -319,10 +440,7 @@
 }</pre>
                   </div>
                 </section>
-              </section>
-
-              <section id="settingsSmokeTab" class="settings-pane">
-                <section class="settings-card panel">
+<section class="settings-card panel">
                   <label class="checkbox-field">
                     <input id="smokeAutoWriteInput" type="checkbox" />
                     <span>保存 Case 时同步生成 Markdown</span>
@@ -340,11 +458,9 @@
                       <dd id="smokeMarkdownFolderText">-</dd>
                     </div>
                   </dl>
-                  <p class="setting-help">备忘数据和冒烟数据都跟随常规里的数据根目录。Markdown 也写入这个根目录下。</p>
-                </section>
-              </section>
-            </div>
-          </div>
+                  <p class="setting-help">备忘数据和冒烟数据都跟随数据配置里的数据根目录。Markdown 也写入这个根目录下。</p>
+                </section></section>
+</div></div>
         </section>
       </main>
     </div>
@@ -352,6 +468,20 @@
     <div id="toast" class="toast" role="status"></div>
     <div id="memoDrawerBackdrop" class="drawer-backdrop" hidden></div>
     <aside id="memoDrawer" class="memo-drawer" aria-label="备忘详情" hidden></aside>
+    <dialog id="groupManager" aria-labelledby="groupManagerTitle">
+      <div class="group-manager-head"><h2 id="groupManagerTitle">管理分组</h2><button id="closeGroupManager" type="button">关闭</button></div>
+      <div id="groupManagerList" class="group-manager-list"></div>
+      <form id="groupEditor" class="group-editor">
+        <label>分组名称<input id="groupName" maxlength="24" required autocomplete="off" placeholder="例如：工作、生活、学习" /></label>
+        <label>分组颜色<select id="groupColor"></select></label>
+        <label class="group-pinned"><input id="groupPinned" type="checkbox" checked />设为常用分组</label>
+        <div class="group-editor-actions"><button id="saveMemoGroup" class="primary" type="submit">创建分组</button><button id="newMemoGroup" type="button">新建另一组</button><button id="deleteMemoGroup" class="danger" type="button" hidden>删除分组</button></div>
+        <p id="groupManagerStatus" role="status"></p>
+      </form>
+    </dialog>
+    <script src="./memo-groups.js"></script>
+    <script src="./group-manager.js"></script>
+    <script src="./memo-utils.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

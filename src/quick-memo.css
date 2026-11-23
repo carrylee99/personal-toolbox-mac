@@ -39,13 +39,14 @@ body {
 }
 
 .quick-form {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   height: 100%;
 }
 
 .quick-field {
+  flex: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
@@ -66,7 +67,7 @@ textarea {
   width: 100%;
   min-width: 0;
   height: 100%;
-  min-height: 70px;
+  min-height: 32px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -137,3 +138,38 @@ textarea:disabled {
 :root[data-theme="classic"] .quick-form.is-error .quick-status {
   color: #b42318;
 }
+
+:root[data-theme="dark"] .quick-shell { background: #1d1e21f5; border: 1px solid #5b5d68; border-radius: 14px; box-shadow: 0 12px 38px #0005; padding: 18px 20px 14px; }
+:root[data-theme="dark"] .quick-slogan { color: #b8bbff; font-size: 12px; font-weight: 500; }
+:root[data-theme="dark"] textarea { color: var(--text); font-size: 17px; font-weight: 400; }
+:root[data-theme="dark"] textarea::placeholder { color: var(--muted); }
+:root[data-theme="dark"] textarea:focus-visible { outline: none; }
+:root[data-theme="dark"] .quick-shell:focus-within { border-color: #a8acff; }
+:root[data-theme="dark"] .quick-status { color: var(--muted); font-weight: 400; }
+:root[data-theme="dark"] .quick-form.is-saving .quick-status { color: var(--pass); }
+:root[data-theme="dark"] .quick-form.is-error .quick-status { color: var(--fail); }
+
+.quick-slogan { display: flex; justify-content: space-between; align-items: center; }
+#quickMemoDue { font-size: 11px; font-weight: 400; }
+
+.quick-date-label { display: flex; align-items: center; gap: 6px; color: #58665e; font-size: 11px; }
+#quickMemoDue { width: 194px; min-width: 0; height: 26px; padding: 2px 4px; border: 1px solid #87958c; border-radius: 5px; background: transparent; color: inherit; font-family: inherit; -webkit-app-region: no-drag; }
+#quickMemoDue:focus-visible { outline: 2px solid #686de0; outline-offset: 2px; }
+.quick-date-hint { margin: 0; min-height: 16px; font-size: 11px; line-height: 16px; color: #a62e27; }
+:root[data-theme="dark"] .quick-date-label { color: var(--muted); }
+:root[data-theme="dark"] #quickMemoDue { color-scheme: dark; border-color: #777a88; }
+:root[data-theme="dark"] .quick-date-hint { color: var(--fail); }
+
+.quick-date-hint { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#quickMemoWithoutDate { flex: none; min-height: 26px; border: 1px solid currentColor; border-radius: 5px; padding: 3px 7px; background: transparent; color: inherit; font: inherit; cursor: pointer; -webkit-app-region: no-drag; }
+#quickMemoWithoutDate:hover { background: #8882; }
+#quickMemoWithoutDate:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+#quickMemoWithoutDate:disabled { opacity: .5; cursor: default; }
+
+#quickMemoGroup { max-width: 122px; margin-right: auto; margin-left: 10px; border: 1px solid #777a8866; border-radius: 5px; padding: 3px 6px; background: transparent; color: inherit; font: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; -webkit-app-region: no-drag; }
+.quick-form { position: relative; }
+.quick-group-popup { position: absolute; z-index: 3; left: 0; right: 0; top: 65px; max-height: 78px; overflow: auto; padding: 5px; background: var(--surface, #f6f8f5); border: 1px solid #777a88; border-radius: 7px; box-shadow: 0 4px 14px #0004; -webkit-app-region: no-drag; }
+#quickGroupOptions { display: flex; flex-wrap: wrap; gap: 4px; }
+#quickGroupOptions button { max-width: 100%; height: 28px; padding: 3px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text, #18231d); font: inherit; font-size: 12px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#quickGroupOptions button[aria-selected="true"], #quickGroupOptions button:hover { background: var(--accent-soft, #dce8df); border-color: var(--accent, #537b65); }
+#quickMemoGroup:focus-visible, #quickGroupOptions button:focus-visible { outline: 2px solid #a8acff; outline-offset: -1px; }

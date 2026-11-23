@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>待办刘海</title>
+    <link rel="stylesheet" href="./design-tokens.css" />
+    <link rel="stylesheet" href="./memo-groups.css" />
+    <link rel="stylesheet" href="./notch.css" />
+  </head>
+  <body>
+    <div id="notchSurface" class="notch-surface">
+      <div class="notch-cap" aria-hidden="true"></div>
+      <main id="notchContent" class="notch-content" aria-label="日历与待办" inert aria-hidden="true">
+        <section class="notch-calendar" aria-label="日历">
+          <header class="calendar-head">
+            <h2 id="calendarMonth"></h2>
+            <button id="previousMonth" class="icon-button" aria-label="上个月" title="上个月" type="button">上月</button>
+            <button id="nextMonth" class="icon-button" aria-label="下个月" title="下个月" type="button">下月</button>
+          </header>
+          <div class="calendar-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div id="calendarDays" class="calendar-days" role="group" aria-label="选择日期，方向键切换日期，Page Up 和 Page Down 切换月份"></div>
+          <footer class="calendar-footer"><button id="calendarToday" type="button">今天</button><span id="calendarHint">圆点表示有待办</span></footer>
+        </section>
+        <section class="notch-agenda" aria-label="每日待办">
+          <header class="agenda-head">
+            <div id="notchGroups"></div><div class="agenda-heading visually-hidden"><h1 id="agendaDate"></h1><span id="agendaSummary" aria-live="polite"></span></div>
+            <button id="notchClose" class="icon-button" aria-label="收起刘海" title="收起 · Esc" type="button">收起</button>
+          </header>
+          <p id="notchError" class="notch-error" role="alert" hidden></p>
+          <div id="notchList" class="notch-list" aria-label="所选日期的未完成待办"></div>
+          <footer class="notch-footer">
+            <button id="notchAdd" type="button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>添加待办</button>
+            <button id="unscheduledToggle" type="button" aria-pressed="false">未安排</button>
+          </footer>
+        </section>
+      </main>
+    </div>
+    <script src="./memo-utils.js"></script>
+    <script src="./notch-calendar.js"></script>
+    <script src="./memo-groups.js"></script>
+    <script src="./notch.js"></script>
+  </body>
+</html>
