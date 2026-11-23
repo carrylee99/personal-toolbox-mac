@@ -1,0 +1,45 @@
+/* UI UX Pro Max: dark surface hierarchy, 4/8 spacing, contrast and visible focus.
+   Desktop adaptation: system fonts, compact controls, no remote font dependency. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161719;
+  --surface: #1d1e21;
+  --surface-soft: #202125;
+  --surface-tint: #292a32;
+  --line: #34353b;
+  --line-strong: #737680;
+  --text: #eff0f3;
+  --muted: #a1a3ae;
+  --accent: #6268de;
+  --accent-strong: #757bec;
+  --accent-soft: #30314a;
+  --accent-softer: #252637;
+  --sky: #9bafff;
+  --sky-soft: #293148;
+  --pass: #80d2aa;
+  --fail: #ff959e;
+  --warn: #e9c27d;
+  --rail: #121315;
+  --rail-soft: #222328;
+  --shadow: 0 12px 32px #00000024;
+  --shadow-soft: 0 4px 12px #00000014;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --motion-fast: 120ms;
+  --motion-panel: 220ms;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+}
+
+:root[data-theme="dark"] :focus-visible {
+  outline: 2px solid #a8acff;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

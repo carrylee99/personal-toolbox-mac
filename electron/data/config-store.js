@@ -2,16 +2,22 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const LEGACY_APP_SUPPORT_NAME = "个人工具箱";
 const LEGACY_DEFAULT_VAULT_PATH = path.join(os.homedir(), "Documents");
 const DEFAULT_SHORTCUTS = {
   quickMemo: "Alt+Q",
-  openMain: "Alt+M"
+  openMain: "Alt+M",
+  notch: "Alt+T"
 };
-const VALID_THEMES = new Set(["natural", "classic"]);
-const DEFAULT_THEME = "natural";
+const DEFAULT_OPEN_AT_LOGIN = false;
+const DEFAULT_NOTCH_HOVER_DELAY_MS = 2000;
+const VALID_THEMES = new Set(["dark", "natural", "classic"]);
+const DEFAULT_THEME = "dark";
 const VALID_FEISHU_PUSH_SCOPES = new Set(["all_pending", "today_created_pending"]);
 const DEFAULT_MEMO_SETTINGS = {
   quickMemoEnterToSave: true,
+  quickMemoDateSeparator: "---",
+  quickMemoGroupSeparator: "#",
   deadlineNotify: {
     enabled: false,
     channels: {
@@ -35,6 +41,7 @@ class ConfigStore {
   constructor(app) {
     this.app = app;
     this.configPath = path.join(app.getPath("userData"), "config.json");
+    this.legacyConfigPath = path.join(app.getPath("appData"), LEGACY_APP_SUPPORT_NAME, "config.json");
   }
 
   getDefaultVaultPath() {
@@ -47,12 +54,35 @@ class ConfigStore {
       return this.normalizeConfig(JSON.parse(raw));
     } catch (error) {
       if (error.code !== "ENOENT") {
-        console.warn("Failed to read config, using defaults", error);
+        // 读取失败时保留原文件，不能把一次磁盘/解析错误变成覆盖用户配置。
+        throw error;
+      } else {
+        const migratedConfig = await this.readLegacyConfig();
+        if (migratedConfig) {
+          return migratedConfig;
+        }
       }
       const config = this.normalizeConfig({});
       await fs.mkdir(config.vaultPath, { recursive: true });
       await this.writeConfig(config);
       return config;
+    }
+  }
+
+  async readLegacyConfig() {
+    if (!this.legacyConfigPath || this.legacyConfigPath === this.configPath) {
+      return null;
+    }
+    try {
+      const raw = await fs.readFile(this.legacyConfigPath, "utf8");
+      const config = this.normalizeConfig(JSON.parse(raw));
+      await this.writeConfig(config);
+      return config;
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.warn("Failed to migrate legacy config, using defaults", error);
+      }
+      return null;
     }
   }
 
@@ -69,7 +99,19 @@ class ConfigStore {
         ? config.vaultPath.trim()
         : this.getDefaultVaultPath(),
       shortcuts: Object.assign({}, DEFAULT_SHORTCUTS, this.normalizeShortcuts(config && config.shortcuts)),
-      theme: this.normalizeTheme(config && config.theme),
+      openAtLogin: Object.prototype.hasOwnProperty.call(config || {}, "openAtLogin")
+        ? config.openAtLogin === true
+        : DEFAULT_OPEN_AT_LOGIN,
+      // 首次升级采用新深色外观；版本标记保证用户之后选择的旧主题不会再次被覆盖。
+      appearanceVersion: 1,
+      theme: config && config.appearanceVersion === 1 ? this.normalizeTheme(config.theme) : DEFAULT_THEME,
+      notch: {
+        enabled: config?.notch?.enabled !== false,
+        // 旧配置默认等待 2 秒，避免升级后仍然快速弹出。
+        hoverDelayMs: Number.isInteger(config?.notch?.hoverDelayMs) && config.notch.hoverDelayMs >= 0
+          && config.notch.hoverDelayMs <= 10000 && config.notch.hoverDelayMs % 100 === 0
+          ? config.notch.hoverDelayMs : DEFAULT_NOTCH_HOVER_DELAY_MS
+      },
       memo: Object.assign({}, DEFAULT_MEMO_SETTINGS, this.normalizeMemoSettings(config && config.memo))
     };
   }
@@ -86,7 +128,10 @@ class ConfigStore {
         : DEFAULT_SHORTCUTS.quickMemo,
       openMain: typeof (shortcuts && shortcuts.openMain) === "string" && shortcuts.openMain.trim()
         ? shortcuts.openMain.trim()
-        : DEFAULT_SHORTCUTS.openMain
+        : DEFAULT_SHORTCUTS.openMain,
+      notch: typeof (shortcuts && shortcuts.notch) === "string" && shortcuts.notch.trim()
+        ? shortcuts.notch.trim()
+        : DEFAULT_SHORTCUTS.notch
     };
   }
 
@@ -96,6 +141,11 @@ class ConfigStore {
       quickMemoEnterToSave: Object.prototype.hasOwnProperty.call(memoSettings, "quickMemoEnterToSave")
         ? memoSettings.quickMemoEnterToSave !== false
         : DEFAULT_MEMO_SETTINGS.quickMemoEnterToSave,
+      // 旧版配置没有识别符字段，读取时兼容默认值，不修改既有备忘。
+      quickMemoGroupSeparator: typeof memoSettings.quickMemoGroupSeparator === "string" && /^[#@!$%&*+~^|:;?=]{1,8}$/.test(memoSettings.quickMemoGroupSeparator)
+        ? memoSettings.quickMemoGroupSeparator : Array.from("#@!$%&*+~^|:;?=").concat(["##", "@@"]).find((symbol) => !String(memoSettings.quickMemoDateSeparator || "---").includes(symbol) && !symbol.includes(memoSettings.quickMemoDateSeparator || "---")),
+      quickMemoDateSeparator: typeof memoSettings.quickMemoDateSeparator === "string" && /^\S{1,16}$/.test(memoSettings.quickMemoDateSeparator)
+        ? memoSettings.quickMemoDateSeparator : DEFAULT_MEMO_SETTINGS.quickMemoDateSeparator,
       deadlineNotify: this.normalizeDeadlineNotifySettings(memoSettings.deadlineNotify),
       feishu: this.normalizeFeishuSettings(memoSettings.feishu)
     };
@@ -204,6 +254,27 @@ class ConfigStore {
     return this.writeConfig(config);
   }
 
+  async setOpenAtLogin(openAtLogin) {
+    const config = await this.readConfig();
+    config.openAtLogin = openAtLogin === true;
+    return this.writeConfig(config);
+  }
+
+  async setNotchEnabled(enabled) {
+    const config = await this.readConfig();
+    config.notch.enabled = enabled === true;
+    return this.writeConfig(config);
+  }
+
+  async setNotchHoverDelay(hoverDelayMs) {
+    if (!Number.isInteger(hoverDelayMs) || hoverDelayMs < 0 || hoverDelayMs > 10000 || hoverDelayMs % 100 !== 0) {
+      throw new Error("悬停时间须为 0–10 秒，最多一位小数");
+    }
+    const config = await this.readConfig();
+    config.notch.hoverDelayMs = hoverDelayMs;
+    return this.writeConfig(config);
+  }
+
   async setMemoSettings(settings) {
     const config = await this.readConfig();
     const currentMemo = this.normalizeMemoSettings(config.memo);
@@ -212,6 +283,20 @@ class ConfigStore {
     if (Object.prototype.hasOwnProperty.call(patch, "quickMemoEnterToSave")) {
       nextMemo.quickMemoEnterToSave = patch.quickMemoEnterToSave !== false;
     }
+    if (Object.prototype.hasOwnProperty.call(patch, "quickMemoDateSeparator")) {
+      const separator = patch.quickMemoDateSeparator;
+      if (typeof separator !== "string" || !/^\S{1,16}$/.test(separator)) {
+        throw new Error("截止时间识别符须为 1–16 个字符，不能包含空格或换行");
+      }
+      nextMemo.quickMemoDateSeparator = separator;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "quickMemoGroupSeparator")) {
+      const separator = patch.quickMemoGroupSeparator;
+      if (typeof separator !== "string" || !/^[#@!$%&*+~^|:;?=]{1,8}$/.test(separator)) throw new Error("分组识别符支持 1–8 个符号，例如 #、@、@@");
+      nextMemo.quickMemoGroupSeparator = separator;
+    }
+    if (nextMemo.quickMemoGroupSeparator.includes(nextMemo.quickMemoDateSeparator)
+      || nextMemo.quickMemoDateSeparator.includes(nextMemo.quickMemoGroupSeparator)) throw new Error("分组识别符与截止时间识别符不能相同或互相包含");
     if (Object.prototype.hasOwnProperty.call(patch, "deadlineNotify")) {
       const currentDeadlineNotify = currentMemo.deadlineNotify || {};
       const patchDeadlineNotify = patch.deadlineNotify || {};
@@ -231,6 +316,7 @@ module.exports = {
   ConfigStore,
   LEGACY_DEFAULT_VAULT_PATH,
   DEFAULT_SHORTCUTS,
+  DEFAULT_OPEN_AT_LOGIN,
   DEFAULT_THEME,
   DEFAULT_MEMO_SETTINGS
 };

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -9,17 +9,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>极速备忘</title>
     <link rel="stylesheet" href="./quick-memo.css" />
+    <link rel="stylesheet" href="./design-tokens.css" />
   </head>
   <body>
     <main class="quick-shell">
       <form id="quickMemoForm" class="quick-form">
-        <label class="quick-field">
-          <span class="quick-slogan">记录一下叭～</span>
-          <textarea id="quickMemoInput" rows="3" aria-label="极速备忘"></textarea>
-        </label>
+        <div class="quick-field">
+          <div class="quick-slogan"><label for="quickMemoInput">极速备忘</label><button id="quickMemoGroup" type="button" title="选择分组">未分组</button><label class="quick-date-label">截止 <input id="quickMemoDue" type="datetime-local" min="1000-01-01T00:00" max="9999-12-31T23:59" aria-label="截止时间" disabled /></label></div>
+          <textarea placeholder="记下一件事…" id="quickMemoInput" rows="3" aria-label="极速备忘" aria-describedby="quickMemoDateHint" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+        </div>
+        <div id="quickGroupPopup" class="quick-group-popup" hidden><div id="quickGroupOptions" role="group" aria-label="选择分组"></div></div>
+        <div id="quickMemoDateHint" class="quick-date-hint" hidden><span id="quickMemoDateMessage" aria-live="polite"></span><button id="quickMemoWithoutDate" type="button">不设截止保存</button></div>
         <p id="quickMemoStatus" class="quick-status" aria-live="polite" hidden></p>
       </form>
     </main>
+    <script src="./memo-groups.js"></script>
+    <script src="./quick-memo-date.js"></script>
     <script src="./quick-memo.js"></script>
   </body>
 </html>

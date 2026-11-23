@@ -109,9 +109,9 @@ function createTodoPayload(notes, options) {
     }
   });
   if (notes.length > MAX_TODO_ITEMS) {
-    lines.push("还有 " + (notes.length - MAX_TODO_ITEMS) + " 条未展示，请打开个人工具箱查看。");
+    lines.push("还有 " + (notes.length - MAX_TODO_ITEMS) + " 条未展示，请打开记性不好查看。");
   }
-  return createPostPayload("个人工具箱待办提醒", lines);
+  return createPostPayload("记性不好待办提醒", lines);
 }
 
 function createDeadlinePayload(notes, options) {
@@ -130,15 +130,15 @@ function createDeadlinePayload(notes, options) {
     }
   });
   if (notes.length > MAX_TODO_ITEMS) {
-    lines.push("还有 " + (notes.length - MAX_TODO_ITEMS) + " 条未展示，请打开个人工具箱查看。");
+    lines.push("还有 " + (notes.length - MAX_TODO_ITEMS) + " 条未展示，请打开记性不好查看。");
   }
-  return createPostPayload("个人工具箱任务截止提醒", lines);
+  return createPostPayload("记性不好任务截止提醒", lines);
 }
 
 function createTestPayload() {
-  return createPostPayload("个人工具箱飞书机器人测试", [
+  return createPostPayload("记性不好飞书机器人测试", [
     "配置验证成功。",
-    "后续可以把待办从个人工具箱推送到这个飞书群。"
+    "后续可以把待办从记性不好推送到这个飞书群。"
   ]);
 }
 

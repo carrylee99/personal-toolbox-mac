@@ -1,11 +1,21 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function subscribe(channel, callback) {
+  const listener = (_event, value) => callback(value);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 const toolboxApi = {
   config: {
     get: () => ipcRenderer.invoke("config:get"),
+    onChanged: (callback) => subscribe("config:changed", callback),
+    setNotchEnabled: (enabled) => ipcRenderer.invoke("config:setNotchEnabled", enabled),
+    setNotchHoverDelay: (hoverDelayMs) => ipcRenderer.invoke("config:setNotchHoverDelay", hoverDelayMs),
     setVaultPath: (vaultPath) => ipcRenderer.invoke("config:setVaultPath", vaultPath),
     setShortcuts: (shortcuts) => ipcRenderer.invoke("config:setShortcuts", shortcuts),
     setTheme: (theme) => ipcRenderer.invoke("config:setTheme", theme),
+    setOpenAtLogin: (openAtLogin) => ipcRenderer.invoke("config:setOpenAtLogin", openAtLogin),
     setMemoSettings: (settings) => ipcRenderer.invoke("config:setMemoSettings", settings),
     selectVaultPath: () => ipcRenderer.invoke("config:selectVaultPath")
   },
@@ -31,6 +41,12 @@ const toolboxApi = {
     selectCase: (caseId) => ipcRenderer.invoke("smoke:selectCase", caseId)
   },
   memo: {
+    ready: () => ipcRenderer.invoke("memo:ready"),
+    onOpenNote: (callback) => subscribe("memo:openNote", callback),
+    listData: () => ipcRenderer.invoke("memo:listData"),
+    saveGroup: (payload) => ipcRenderer.invoke("memo:saveGroup", payload),
+    moveGroup: (id, direction) => ipcRenderer.invoke("memo:moveGroup", id, direction),
+    deleteGroup: (id) => ipcRenderer.invoke("memo:deleteGroup", id),
     listNotes: () => ipcRenderer.invoke("memo:listNotes"),
     createNote: (content) => ipcRenderer.invoke("memo:createNote", content),
     updateNote: (noteId, content) => ipcRenderer.invoke("memo:updateNote", noteId, content),
@@ -47,10 +63,25 @@ const toolboxApi = {
       return () => ipcRenderer.removeListener("memo:changed", listener);
     }
   },
+  notch: {
+    toggle: () => ipcRenderer.invoke("notch:toggle"),
+    ready: () => ipcRenderer.invoke("notch:ready"),
+    collapse: () => ipcRenderer.invoke("notch:collapse"),
+    quickMemo: (dueAt, groupId) => ipcRenderer.invoke("notch:quickMemo", dueAt, groupId),
+    openNote: (id) => ipcRenderer.invoke("notch:openNote", id),
+    onState: (callback) => subscribe("notch:state", callback)
+  },
   poem: {
     getDaily: (dateKey) => ipcRenderer.invoke("poem:getDaily", dateKey)
   },
+  textDiff: {
+    compare: (payload) => ipcRenderer.invoke("textDiff:compare", payload)
+  },
   quickMemo: {
+    loadTimeRules: () => ipcRenderer.invoke("quickMemo:loadTimeRules"),
+    recordUnknownTime: (expression) => ipcRenderer.invoke("quickMemo:recordUnknownTime", expression),
+    createNote: (content, learning) => ipcRenderer.invoke("quickMemo:createNote", content, learning),
+    getContext: () => ipcRenderer.invoke("quickMemo:getContext"),
     close: () => ipcRenderer.invoke("quickMemo:close"),
     setSaving: (saving) => ipcRenderer.invoke("quickMemo:setSaving", saving),
     onFocus: (callback) => {

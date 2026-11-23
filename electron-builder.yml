@@ -1,5 +1,5 @@
 appId: com.lixuhui.personal-toolbox
-productName: 个人工具箱
+productName: 记性不好
 asar: true
 directories:
   output: dist
@@ -7,6 +7,7 @@ files:
   - electron/**/*
   - src/**/*
   - assets/**/*
+  - node_modules/diff/**/*
 mac:
   category: public.app-category.productivity
   icon: assets/icon.icns
@@ -14,4 +15,4 @@ mac:
     - target: dir
     - target: dmg
 dmg:
-  artifactName: 个人工具箱-${version}.${ext}
+  artifactName: 记性不好-${version}.${ext}

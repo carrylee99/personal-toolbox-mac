@@ -740,6 +740,293 @@ button.dashboard-tile:focus {
   overflow-wrap: anywhere;
 }
 
+.text-diff-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 11px 14px;
+}
+
+#textDiffModule {
+  gap: 12px;
+  overflow: hidden;
+}
+
+#textDiffModule .module-head {
+  flex: 0 0 auto;
+}
+
+.text-diff-toolbar .field {
+  min-width: 132px;
+}
+
+.text-diff-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.text-diff-stats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.text-diff-stats span:first-child {
+  background: rgba(37, 132, 83, 0.12);
+  color: var(--pass);
+}
+
+.text-diff-stats span:nth-child(2) {
+  background: rgba(186, 59, 52, 0.1);
+  color: var(--fail);
+}
+
+.text-diff-stats span:nth-child(3) {
+  background: rgba(166, 107, 23, 0.12);
+  color: var(--warn);
+}
+
+.text-diff-workspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  flex: 0 0 clamp(176px, 24vh, 240px);
+  min-height: 176px;
+}
+
+.text-diff-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px;
+}
+
+.text-diff-editor > span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.text-diff-editor textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.text-diff-editor small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.text-diff-output {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-height: clamp(180px, 34vh, 280px);
+  overflow: hidden;
+}
+
+.text-diff-output-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 13px 16px;
+}
+
+.text-diff-output-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.text-diff-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-diff-navigation span {
+  min-width: 42px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: center;
+}
+
+.text-diff-output-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px;
+  background: var(--surface);
+}
+
+.segmented-control button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 9px;
+  padding: 4px 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.segmented-control button.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.text-diff-result {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 24px;
+  scroll-padding-block: 20px;
+}
+
+.text-diff-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 100%;
+}
+
+.text-diff-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 254, 250, 0.82);
+}
+
+.text-diff-pane-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 11px;
+  background: rgba(255, 254, 250, 0.96);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.text-diff-pane-body {
+  min-height: 100%;
+}
+
+.text-diff-block {
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.text-diff-block + .text-diff-block {
+  border-top: 1px solid rgba(223, 232, 221, 0.7);
+}
+
+.text-diff-block.is-empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.text-diff-block.is-added {
+  background: rgba(37, 132, 83, 0.09);
+}
+
+.text-diff-block.is-removed {
+  background: rgba(186, 59, 52, 0.08);
+}
+
+.text-diff-block.is-changed {
+  background: rgba(166, 107, 23, 0.06);
+}
+
+.text-diff-block[data-diff-point] {
+  scroll-margin-block: 20px;
+}
+
+.text-diff-block[data-diff-point].is-current {
+  position: relative;
+  z-index: 0;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.text-diff-unified {
+  min-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 254, 250, 0.82);
+  overflow: hidden;
+}
+
+.text-diff-part.is-added {
+  background: rgba(37, 132, 83, 0.16);
+  color: var(--pass);
+}
+
+.text-diff-part.is-removed {
+  background: rgba(186, 59, 52, 0.13);
+  color: var(--fail);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.text-diff-empty {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
 .smoke-workspace {
   display: grid;
   grid-template-columns: minmax(260px, 300px) minmax(320px, 380px) minmax(520px, 1fr);
@@ -1168,6 +1455,51 @@ button.dashboard-tile:focus {
   gap: 12px;
 }
 
+.memo-subtabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+  background: rgba(255, 254, 250, 0.76);
+  box-shadow: var(--shadow-soft);
+}
+
+.memo-subtabs button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.memo-subtabs button.is-active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(47, 143, 107, 0.18);
+}
+
+.memo-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 6px;
+}
+
 .memo-composer {
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -1351,6 +1683,17 @@ button.dashboard-tile:focus {
   color: #2563eb;
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.45;
+  padding: 2px 7px;
+}
+
+.note-delay {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(180, 83, 9, 0.12);
+  color: #a45c00;
+  font-size: 11px;
+  font-weight: 850;
   line-height: 1.45;
   padding: 2px 7px;
 }
@@ -1619,6 +1962,26 @@ button.dashboard-tile:focus {
 }
 
 @media (max-width: 900px) {
+  .text-diff-workspace,
+  .text-diff-split {
+    grid-template-columns: 1fr;
+  }
+
+  .text-diff-stats {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .text-diff-output-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .text-diff-output-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .settings-layout {
     grid-template-columns: 1fr;
   }
@@ -2058,3 +2421,9 @@ button.dashboard-tile:focus {
 :root[data-theme="classic"] .toast.is-error {
   border-color: rgba(180, 35, 24, 0.45);
 }
+
+/* 完成时间快捷筛选沿用现有令牌，支持键盘焦点和窄窗口换行。 */
+.memo-completed-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.memo-completed-filters button { min-height: 30px; padding: 5px 10px; font-size: 12px; box-shadow: none; }
+.memo-completed-filters button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+#memoCompletedRange { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

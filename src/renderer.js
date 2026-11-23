@@ -6,11 +6,13 @@
   const api = createSafeBridgeApi(bridgeApi);
   const activeModuleStorageKey = "personalToolbox.activeModule";
   const settingsTabStorageKey = "personalToolbox.settingsTab";
+  const memoSubTabStorageKey = "personalToolbox.memoSubTab";
   const memoRecentDoneExpandedStorageKey = "personalToolbox.memoRecentDoneExpanded";
   const memoOlderDoneExpandedStorageKey = "personalToolbox.memoOlderDoneExpanded";
-  const validModules = new Set(["dashboard", "memo", "smoke", "settings"]);
-  const validSettingsTabs = new Set(["general", "memo", "smoke"]);
-  const validThemes = new Set(["natural", "classic"]);
+  const validModules = new Set(["dashboard", "memo", "textDiff", "smoke", "settings"]);
+  const validSettingsTabs = new Set(["general", "appearance", "shortcuts", "memo", "data"]);
+  const validMemoSubTabs = new Set(["all", "delayed", "done"]);
+  const validThemes = new Set(["dark", "natural", "classic"]);
   const recentCompletedWindowMs = 3 * 24 * 60 * 60 * 1000;
 
   function createMissingBridgeApi() {
@@ -20,9 +22,13 @@
     return {
       config: {
         get: fail,
+        onChanged: () => () => {},
+        setNotchEnabled: fail,
+        setNotchHoverDelay: fail,
         setVaultPath: fail,
         setShortcuts: fail,
         setTheme: fail,
+        setOpenAtLogin: fail,
         setMemoSettings: fail,
         selectVaultPath: fail
       },
@@ -48,7 +54,12 @@
         selectCase: fail
       },
       memo: {
-        listNotes: fail,
+        ready: fail,
+        onOpenNote: () => () => {},        listNotes: fail,
+        listData: fail,
+        saveGroup: fail,
+        moveGroup: fail,
+        deleteGroup: fail,
         createNote: fail,
         updateNote: fail,
         toggleNote: fail,
@@ -62,6 +73,10 @@
       },
       poem: {
         getDaily: fail
+      },
+      notch: { toggle: fail },
+      textDiff: {
+        compare: fail
       }
     };
   }
@@ -85,7 +100,9 @@
       config: mergeModuleApi(fallback.config, sourceApi.config),
       smoke: mergeModuleApi(fallback.smoke, sourceApi.smoke),
       memo: mergeModuleApi(fallback.memo, sourceApi.memo),
-      poem: mergeModuleApi(fallback.poem, sourceApi.poem)
+      poem: mergeModuleApi(fallback.poem, sourceApi.poem),
+      notch: mergeModuleApi(fallback.notch, sourceApi.notch),
+      textDiff: mergeModuleApi(fallback.textDiff, sourceApi.textDiff)
     };
   }
 
@@ -96,7 +113,12 @@
 
   function readStoredSettingsTab() {
     const stored = window.localStorage.getItem(settingsTabStorageKey);
-    return validSettingsTabs.has(stored) ? stored : "general";
+    return stored === "smoke" ? "data" : (validSettingsTabs.has(stored) ? stored : "general");
+  }
+
+  function readStoredMemoSubTab() {
+    const stored = window.localStorage.getItem(memoSubTabStorageKey);
+    return validMemoSubTabs.has(stored) ? stored : "all";
   }
 
   const state = {
@@ -109,10 +131,14 @@
     selectedCaseIds: [],
     sceneBulkDeleteMode: false,
     caseBulkDeleteMode: false,
-    sidebarCollapsed: window.localStorage.getItem("personalToolbox.sidebarCollapsed") !== "false",
+    sidebarCollapsed: window.localStorage.getItem("personalToolbox.sidebarCollapsed") === "true",
     scenesPanelCollapsed: false,
     memoNotes: [],
+    memoGroups: [],
+    memoGroupId: window.localStorage.getItem("personalToolbox.memoGroupId") ?? "all",
     memoSearch: "",
+    memoSubTab: readStoredMemoSubTab(),
+    memoCompletedFilter: "all",
     selectedMemoId: "",
     memoDrawerOpen: false,
     memoRecentDoneExpanded: window.localStorage.getItem(memoRecentDoneExpandedStorageKey) !== "false",
@@ -120,6 +146,20 @@
     dailyPoem: null,
     dailyPoemDateKey: "",
     dailyPoemLoading: false,
+    textDiff: {
+      left: "",
+      right: "",
+      mode: "line",
+      view: "split",
+      ignoreWhitespace: true,
+      ignoreCase: true,
+      stripTrailingCr: true,
+      result: null,
+      loading: false,
+      requestId: 0,
+      error: "",
+      activeDiffIndex: -1
+    },
     settingsTab: readStoredSettingsTab()
   };
 
@@ -144,6 +184,28 @@
     smokeModule: $("smokeModule"),
     smokeWorkspace: document.querySelector(".smoke-workspace"),
     memoModule: $("memoModule"),
+    textDiffModule: $("textDiffModule"),
+    textDiffSummary: $("textDiffSummary"),
+    textDiffModeSelect: $("textDiffModeSelect"),
+    textDiffIgnoreWhitespaceInput: $("textDiffIgnoreWhitespaceInput"),
+    textDiffIgnoreCaseInput: $("textDiffIgnoreCaseInput"),
+    textDiffStripCrInput: $("textDiffStripCrInput"),
+    textDiffAddedCount: $("textDiffAddedCount"),
+    textDiffRemovedCount: $("textDiffRemovedCount"),
+    textDiffChangedCount: $("textDiffChangedCount"),
+    textDiffLeftInput: $("textDiffLeftInput"),
+    textDiffRightInput: $("textDiffRightInput"),
+    textDiffLeftMeta: $("textDiffLeftMeta"),
+    textDiffRightMeta: $("textDiffRightMeta"),
+    textDiffResult: $("textDiffResult"),
+    textDiffSplitViewButton: $("textDiffSplitViewButton"),
+    textDiffUnifiedViewButton: $("textDiffUnifiedViewButton"),
+    textDiffPreviousButton: $("textDiffPreviousButton"),
+    textDiffNextButton: $("textDiffNextButton"),
+    textDiffPosition: $("textDiffPosition"),
+    swapTextDiffButton: $("swapTextDiffButton"),
+    clearTextDiffButton: $("clearTextDiffButton"),
+    copyTextDiffButton: $("copyTextDiffButton"),
     settingsModule: $("settingsModule"),
     smokeSummary: $("smokeSummary"),
     smokeVersionSelect: $("smokeVersionSelect"),
@@ -168,15 +230,21 @@
     pushMemoFeishuButton: $("pushMemoFeishuButton"),
     memoSearchLabel: $("memoSearchLabel"),
     memoSearchInput: $("memoSearchInput"),
+    memoSubTabs: Array.from(document.querySelectorAll("[data-memo-tab]")),
+    memoDelayedCount: $("memoDelayedCount"),
     memoForm: $("memoForm"),
     memoInput: $("memoInput"),
     memoListView: $("memoListView"),
     memoList: $("memoList"),
     memoDrawerBackdrop: $("memoDrawerBackdrop"),
     memoDrawer: $("memoDrawer"),
-    settingsGeneralTab: $("settingsGeneralTab"),
-    settingsMemoTab: $("settingsMemoTab"),
-    settingsSmokeTab: $("settingsSmokeTab"),
+    notchEnabledInput: $("notchEnabledInput"),
+    notchHoverDelayInput: $("notchHoverDelayInput"),
+    saveNotchHoverDelayButton: $("saveNotchHoverDelayButton"),
+    notchHoverDelayStatus: $("notchHoverDelayStatus"),
+    previewNotchButton: $("previewNotchButton"),
+    notchShortcutInput: $("notchShortcutInput"),
+    saveNotchShortcutButton: $("saveNotchShortcutButton"),
     vaultPathInput: $("vaultPathInput"),
     saveVaultPathButton: $("saveVaultPathButton"),
     chooseVaultPathButton: $("chooseVaultPathButton"),
@@ -189,7 +257,13 @@
     smokeMarkdownFolderText: $("smokeMarkdownFolderText"),
     memoDataPathText: $("memoDataPathText"),
     memoDataPathTextMirror: $("memoDataPathTextMirror"),
+    openAtLoginInput: $("openAtLoginInput"),
     quickMemoEnterToSaveInput: $("quickMemoEnterToSaveInput"),
+    quickMemoDateSeparatorInput: $("quickMemoDateSeparatorInput"),
+    quickMemoDateSeparatorHelp: $("quickMemoDateSeparatorHelp"),
+    quickMemoDateSeparatorStatus: $("quickMemoDateSeparatorStatus"),
+    saveQuickMemoDateSeparatorButton: $("saveQuickMemoDateSeparatorButton"),
+    resetQuickMemoDateSeparatorButton: $("resetQuickMemoDateSeparatorButton"),
     deadlineNotifyEnabledInput: $("deadlineNotifyEnabledInput"),
     deadlineNotifyMacosInput: $("deadlineNotifyMacosInput"),
     deadlineNotifyFeishuInput: $("deadlineNotifyFeishuInput"),
@@ -217,7 +291,7 @@
 
   function normalizeTheme(theme) {
     const normalized = String(theme || "").trim();
-    return validThemes.has(normalized) ? normalized : "natural";
+    return validThemes.has(normalized) ? normalized : "dark";
   }
 
   function normalizeMemoSettings(settings) {
@@ -229,6 +303,7 @@
     const pushTimes = normalizePushTimes(Array.isArray(feishu.pushTimes) && feishu.pushTimes.length ? feishu.pushTimes : [feishu.pushTime || "09:00"]);
     return {
       quickMemoEnterToSave: !memoSettings || memoSettings.quickMemoEnterToSave !== false,
+      quickMemoDateSeparator: memoSettings.quickMemoDateSeparator || "---",
       deadlineNotify: {
         enabled: deadlineNotify.enabled === true,
         channels: {
@@ -294,6 +369,14 @@
     }
     state.settingsTab = tabName;
     window.localStorage.setItem(settingsTabStorageKey, tabName);
+  }
+
+  function setMemoSubTab(tabName) {
+    if (!validMemoSubTabs.has(tabName)) {
+      return;
+    }
+    state.memoSubTab = tabName;
+    window.localStorage.setItem(memoSubTabStorageKey, tabName);
   }
 
   function joinVaultPath(relativePath) {
@@ -839,9 +922,14 @@
     state.smoke = await api.smoke.list();
   }
 
+  let memoLoadId = 0;
   async function loadMemo() {
-    const notes = await api.memo.listNotes();
-    state.memoNotes = notes;
+    const id = ++memoLoadId;
+    const data = await api.memo.listData();
+    if (id !== memoLoadId) return;
+    state.memoNotes = data.notes;
+    state.memoGroups = data.groups;
+    if (state.memoGroupId !== "all" && state.memoGroupId !== "" && !data.groups.some((group) => group.id === state.memoGroupId)) state.memoGroupId = "all";
     if (state.selectedMemoId && !state.memoNotes.some((note) => note.id === state.selectedMemoId)) {
       state.selectedMemoId = "";
       state.memoDrawerOpen = false;
@@ -866,9 +954,15 @@
     try {
       await loadMemo();
       renderDashboard();
-      renderMemo();
+      renderMemoShell();
+      renderMemoListView();
+      // 刘海的数据更新不应重建正在输入的详情字段，避免丢失尚未失焦保存的文本。
+      if (!state.memoDrawerOpen || !refs.memoDrawer.contains(document.activeElement)) {
+        renderMemoDrawer();
+      }
     } catch (error) {
       console.error(error);
+      setToast("同步备忘失败：" + error.message, true);
     }
   }
 
@@ -877,6 +971,7 @@
     renderDashboard();
     renderSmoke();
     renderMemo();
+    renderTextDiff();
     renderSettings();
   }
 
@@ -896,6 +991,7 @@
     refs.dashboardModule.classList.toggle("is-active", state.activeModule === "dashboard");
     refs.smokeModule.classList.toggle("is-active", state.activeModule === "smoke");
     refs.memoModule.classList.toggle("is-active", state.activeModule === "memo");
+    refs.textDiffModule.classList.toggle("is-active", state.activeModule === "textDiff");
     refs.settingsModule.classList.toggle("is-active", state.activeModule === "settings");
     refs.smokeWorkspace.classList.toggle("is-scenes-collapsed", state.scenesPanelCollapsed);
     refs.toggleScenesPanelButton.textContent = state.scenesPanelCollapsed ? "›" : "‹";
@@ -1008,6 +1104,291 @@
     setActiveModule("dashboard");
     renderShell();
     renderDashboard({ forcePoem: true });
+  }
+
+  function countTextLines(value) {
+    const text = String(value || "");
+    return text ? text.split(/\r\n|\r|\n/).length : 0;
+  }
+
+  function formatTextDiffMeta(value) {
+    const text = String(value || "");
+    return text.length + " 字符 · " + countTextLines(text) + " 行";
+  }
+
+  function getTextDiffStats() {
+    const result = state.textDiff.result;
+    return result && result.stats ? result.stats : { added: 0, removed: 0, changed: 0 };
+  }
+
+  function getTextDiffBlocks() {
+    const result = state.textDiff.result;
+    if (!result) {
+      return [];
+    }
+    if (Array.isArray(result.blocks)) {
+      return result.blocks;
+    }
+    return [{
+      type: "equal",
+      left: result.parts && result.parts.left,
+      right: result.parts && result.parts.right,
+      unified: result.parts && result.parts.unified
+    }];
+  }
+
+  function getTextDiffDifferenceBlocks() {
+    return getTextDiffBlocks().filter((block) => block && block.type !== "equal");
+  }
+
+  function updateTextDiffNavigation() {
+    const differenceBlocks = getTextDiffDifferenceBlocks();
+    const count = differenceBlocks.length;
+    const active = count ? Math.min(Math.max(state.textDiff.activeDiffIndex, -1), count - 1) : -1;
+    state.textDiff.activeDiffIndex = active;
+    refs.textDiffPosition.textContent = active >= 0 ? (active + 1) + " / " + count : "0 / " + count;
+    refs.textDiffPreviousButton.disabled = count === 0;
+    refs.textDiffNextButton.disabled = count === 0;
+  }
+
+  function setTextDiffInputValue(input, value) {
+    if (input.value !== value) {
+      input.value = value;
+    }
+  }
+
+  function renderTextDiff() {
+    const diffState = state.textDiff;
+    setTextDiffInputValue(refs.textDiffLeftInput, diffState.left);
+    setTextDiffInputValue(refs.textDiffRightInput, diffState.right);
+    refs.textDiffModeSelect.value = diffState.mode;
+    refs.textDiffIgnoreWhitespaceInput.checked = diffState.ignoreWhitespace;
+    refs.textDiffIgnoreCaseInput.checked = diffState.ignoreCase;
+    refs.textDiffStripCrInput.checked = diffState.stripTrailingCr;
+    refs.textDiffLeftMeta.textContent = formatTextDiffMeta(diffState.left);
+    refs.textDiffRightMeta.textContent = formatTextDiffMeta(diffState.right);
+
+    const stats = getTextDiffStats();
+    refs.textDiffAddedCount.textContent = "新增 " + stats.added;
+    refs.textDiffRemovedCount.textContent = "删除 " + stats.removed;
+    refs.textDiffChangedCount.textContent = "变更 " + stats.changed;
+    refs.textDiffSplitViewButton.classList.toggle("is-active", diffState.view === "split");
+    refs.textDiffUnifiedViewButton.classList.toggle("is-active", diffState.view === "unified");
+    refs.copyTextDiffButton.disabled = !diffState.result || diffState.loading;
+    updateTextDiffNavigation();
+
+    if (diffState.loading) {
+      refs.textDiffSummary.textContent = "对比中...";
+    } else if (diffState.error) {
+      refs.textDiffSummary.textContent = "对比失败：" + diffState.error;
+    } else if (!diffState.left && !diffState.right) {
+      refs.textDiffSummary.textContent = "粘贴左右文本开始对比";
+    } else if (diffState.result && diffState.result.isEqual) {
+      refs.textDiffSummary.textContent = "完全一致";
+    } else if (diffState.result) {
+      refs.textDiffSummary.textContent = "有差异 · 新增 " + stats.added + " · 删除 " + stats.removed + " · 变更 " + stats.changed;
+    } else {
+      refs.textDiffSummary.textContent = "等待对比";
+    }
+
+    renderTextDiffResult();
+  }
+
+  function appendTextDiffParts(container, parts) {
+    (Array.isArray(parts) ? parts : []).forEach((part) => {
+      const span = document.createElement("span");
+      span.className = "text-diff-part is-" + (part.type || "equal");
+      span.textContent = String(part.value || "");
+      container.appendChild(span);
+    });
+  }
+
+  function createTextDiffEmpty(message) {
+    const empty = document.createElement("div");
+    empty.className = "text-diff-empty";
+    empty.textContent = message;
+    return empty;
+  }
+
+  function createTextDiffBlock(block, key) {
+    const element = document.createElement("pre");
+    element.className = "text-diff-block is-" + (block.type || "equal");
+    if (block.type !== "equal" && block.diffIndex) {
+      element.dataset.diffPoint = String(block.diffIndex);
+      element.setAttribute("aria-label", "差异 " + block.diffIndex);
+      element.classList.toggle("is-current", state.textDiff.activeDiffIndex === block.diffIndex - 1);
+    }
+    appendTextDiffParts(element, block[key]);
+    if (!element.textContent) {
+      element.classList.add("is-empty");
+      element.textContent = "∅";
+    }
+    return element;
+  }
+
+  function renderTextDiffResult() {
+    refs.textDiffResult.textContent = "";
+    const diffState = state.textDiff;
+    if (diffState.loading) {
+      refs.textDiffResult.appendChild(createTextDiffEmpty("正在计算差异..."));
+      return;
+    }
+    if (diffState.error) {
+      refs.textDiffResult.appendChild(createTextDiffEmpty("对比失败：" + diffState.error));
+      return;
+    }
+    if (!diffState.left && !diffState.right) {
+      refs.textDiffResult.appendChild(createTextDiffEmpty("在上方粘贴两段文本，差异会自动显示在这里。"));
+      return;
+    }
+    if (!diffState.result) {
+      refs.textDiffResult.appendChild(createTextDiffEmpty("等待输入完成后自动对比。"));
+      return;
+    }
+
+    const blocks = getTextDiffBlocks();
+    if (diffState.view === "unified") {
+      const unified = document.createElement("div");
+      unified.className = "text-diff-unified";
+      blocks.forEach((block) => unified.appendChild(createTextDiffBlock(block, "unified")));
+      refs.textDiffResult.appendChild(unified);
+      return;
+    }
+
+    const split = document.createElement("div");
+    split.className = "text-diff-split";
+    const leftPane = document.createElement("section");
+    leftPane.className = "text-diff-pane";
+    const leftTitle = document.createElement("div");
+    leftTitle.className = "text-diff-pane-title";
+    leftTitle.textContent = "原文本";
+    leftPane.appendChild(leftTitle);
+    const rightPane = document.createElement("section");
+    rightPane.className = "text-diff-pane";
+    const rightTitle = document.createElement("div");
+    rightTitle.className = "text-diff-pane-title";
+    rightTitle.textContent = "新文本";
+    rightPane.appendChild(rightTitle);
+    const leftBody = document.createElement("div");
+    leftBody.className = "text-diff-pane-body";
+    const rightBody = document.createElement("div");
+    rightBody.className = "text-diff-pane-body";
+    blocks.forEach((block) => {
+      leftBody.appendChild(createTextDiffBlock(block, "left"));
+      rightBody.appendChild(createTextDiffBlock(block, "right"));
+    });
+    leftPane.appendChild(leftBody);
+    rightPane.appendChild(rightBody);
+    split.append(leftPane, rightPane);
+    refs.textDiffResult.appendChild(split);
+  }
+
+  function navigateTextDiff(direction) {
+    const differenceBlocks = getTextDiffDifferenceBlocks();
+    if (!differenceBlocks.length) {
+      return;
+    }
+    const count = differenceBlocks.length;
+    const current = state.textDiff.activeDiffIndex;
+    state.textDiff.activeDiffIndex = current < 0
+      ? direction > 0 ? 0 : count - 1
+      : (current + direction + count) % count;
+    updateTextDiffNavigation();
+    refs.textDiffResult.querySelectorAll("[data-diff-point]").forEach((element) => {
+      element.classList.toggle("is-current", element.dataset.diffPoint === String(state.textDiff.activeDiffIndex + 1));
+    });
+    const target = refs.textDiffResult.querySelector("[data-diff-point=\"" + (state.textDiff.activeDiffIndex + 1) + "\"]");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  function scheduleTextDiffCompare() {
+    state.textDiff.activeDiffIndex = -1;
+    state.textDiff.requestId += 1;
+    window.clearTimeout(timers.get("textDiff"));
+    timers.set("textDiff", window.setTimeout(compareTextDiffNow, 250));
+  }
+
+  async function compareTextDiffNow() {
+    window.clearTimeout(timers.get("textDiff"));
+    const diffState = state.textDiff;
+    const requestId = diffState.requestId + 1;
+    diffState.requestId = requestId;
+    diffState.error = "";
+    if (!diffState.left && !diffState.right) {
+      diffState.loading = false;
+      diffState.result = null;
+      renderTextDiff();
+      return;
+    }
+
+    diffState.loading = true;
+    renderTextDiff();
+    try {
+      const result = await api.textDiff.compare({
+        left: diffState.left,
+        right: diffState.right,
+        mode: diffState.mode,
+        options: {
+          ignoreWhitespace: diffState.ignoreWhitespace,
+          ignoreCase: diffState.ignoreCase,
+          stripTrailingCr: diffState.stripTrailingCr
+        }
+      });
+      if (state.textDiff.requestId !== requestId) {
+        return;
+      }
+      state.textDiff.result = result;
+      state.textDiff.error = "";
+    } catch (error) {
+      if (state.textDiff.requestId !== requestId) {
+        return;
+      }
+      console.error(error);
+      state.textDiff.result = null;
+      state.textDiff.error = error.message || String(error);
+    } finally {
+      if (state.textDiff.requestId === requestId) {
+        state.textDiff.loading = false;
+        renderTextDiff();
+      }
+    }
+  }
+
+  function updateTextDiffFromControls() {
+    state.textDiff.mode = refs.textDiffModeSelect.value === "word" || refs.textDiffModeSelect.value === "char" ? refs.textDiffModeSelect.value : "line";
+    state.textDiff.ignoreWhitespace = refs.textDiffIgnoreWhitespaceInput.checked;
+    state.textDiff.ignoreCase = refs.textDiffIgnoreCaseInput.checked;
+    state.textDiff.stripTrailingCr = refs.textDiffStripCrInput.checked;
+    scheduleTextDiffCompare();
+    renderTextDiff();
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.setAttribute("readonly", "readonly");
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+
+  async function copyTextDiffUnified() {
+    const result = state.textDiff.result;
+    if (!result || !result.unifiedText) {
+      setToast("没有可复制的 diff");
+      return;
+    }
+    await copyTextToClipboard(result.unifiedText);
+    setToast("已复制统一 diff");
   }
 
   function renderSmoke() {
@@ -1719,10 +2100,8 @@
 
   function getFilteredMemoNotes() {
     const keyword = state.memoSearch.trim().toLowerCase();
-    if (!keyword) {
-      return state.memoNotes;
-    }
-    return state.memoNotes.filter((note) => getMemoSearchText(note).includes(keyword));
+    return state.memoNotes.filter((note) => window.memoGroups.matches(note, state.memoGroupId)
+      && (!keyword || getMemoSearchText(note).includes(keyword)));
   }
 
   function getMemoNoteById(noteId) {
@@ -1755,6 +2134,15 @@
     return Number.isFinite(value) ? value : 0;
   }
 
+  function getPreviousWeekRange(now = new Date()) {
+    // 按本地自然周（周一开始），使用日历运算跨月/跨年及夏令时，结束边界不包含本周一。
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    end.setDate(end.getDate() - (end.getDay() + 6) % 7);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 7);
+    return { start, end };
+  }
+
   function isMemoRecentlyCompleted(note) {
     if (!note || !note.completed) {
       return false;
@@ -1765,6 +2153,10 @@
   function isMemoOverdue(note) {
     const dueAt = normalizeMemoDueAt(note && note.dueAt);
     return Boolean(dueAt && !(note && note.completed) && dueAt <= Date.now());
+  }
+
+  function isMemoDelayed(note) {
+    return window.memoUtils.isDelayed(note);
   }
 
   function openMemoDrawer(noteId) {
@@ -1843,7 +2235,7 @@
     const selectedBeforeCreate = state.selectedMemoId;
     const drawerOpenBeforeCreate = state.memoDrawerOpen;
     try {
-      const note = await api.memo.createNote({ title, detail: "" });
+      const note = await api.memo.createNote({ title, detail: "", groupId: state.memoGroupId === "all" ? "" : state.memoGroupId });
       await loadMemo();
       if (state.selectedMemoId === selectedBeforeCreate && state.memoDrawerOpen === drawerOpenBeforeCreate) {
         state.selectedMemoId = note.id;
@@ -1869,23 +2261,68 @@
   function renderMemoShell() {
     refs.memoListView.classList.add("is-active");
     refs.memoSearchLabel.hidden = false;
-    const todo = state.memoNotes.filter((note) => !note.completed).length;
-    refs.memoSummary.textContent = "待办 " + todo + " · 完成 " + (state.memoNotes.length - todo);
+    memoGroupBar.update({ groups: state.memoGroups, notes: window.memoUtils.pendingNotes(state.memoNotes), selected: state.memoGroupId });
+    const grouped = state.memoNotes.filter((note) => window.memoGroups.matches(note, state.memoGroupId));
+    const todo = grouped.filter((note) => !note.completed).length;
+    const delayed = grouped.filter(isMemoDelayed).length;
+    refs.memoSummary.textContent = "待办 " + todo + " · 完成 " + (grouped.length - todo);
+    const groupName = state.memoGroups.find((group) => group.id === state.memoGroupId)?.name;
+    refs.memoInput.placeholder = groupName ? "添加到「" + groupName + "」" : "新建备忘标题";
+    refs.memoDelayedCount.textContent = String(delayed);
+    refs.memoSubTabs.forEach((button) => {
+      const isActive = button.dataset.memoTab === state.memoSubTab;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", String(isActive));
+    });
   }
 
   function renderMemoListView() {
     refs.memoList.replaceChildren();
     const filtered = getFilteredMemoNotes();
-    if (!filtered.length) {
+    const completedFilters = $("memoCompletedFilters");
+    const isCompletedView = state.memoSubTab === "done";
+    completedFilters.hidden = !isCompletedView;
+    completedFilters.querySelectorAll("button").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.completedFilter === state.memoCompletedFilter));
+    });
+    const week = getPreviousWeekRange();
+    const lastSunday = new Date(week.end);
+    lastSunday.setDate(lastSunday.getDate() - 1);
+    const formatDay = (date) => date.getFullYear() + "/" + (date.getMonth() + 1) + "/" + date.getDate();
+    $("memoCompletedRange").textContent = isCompletedView && state.memoCompletedFilter === "last-week"
+      ? formatDay(week.start) + " – " + formatDay(lastSunday) : "";
+    if (isCompletedView && state.memoCompletedFilter === "last-week") {
+      // 先复用分组和关键词筛选，再按完成时间筛选；恢复为待办的记录不会出现在结果中。
+      const completed = filtered.filter((note) => note.completed && getMemoCompletedTime(note) >= week.start.getTime()
+        && getMemoCompletedTime(note) < week.end.getTime())
+        .sort((a, b) => getMemoCompletedTime(b) - getMemoCompletedTime(a));
+      refs.memoList.append(createMemoGroup("上周完成", completed, "list", {
+        emptyText: "当前分组和搜索条件下，上周没有完成的备忘"
+      }));
+      return;
+    }
+    if (state.memoSubTab === "delayed") {
+      const delayed = filtered.filter(isMemoDelayed);
+      if (!delayed.length) {
+        refs.memoList.append(createEmpty(state.memoSearch ? "没有匹配延期任务" : "暂无延期任务"));
+        return;
+      }
+      refs.memoList.append(createMemoGroup("延期处理", delayed, "list", {
+        emptyText: "暂无延期任务"
+      }));
+      return;
+    }
+    const visible = filtered.filter((note) => !isMemoDelayed(note) && (state.memoSubTab === "done" ? note.completed : !note.completed));
+    if (!visible.length) {
       refs.memoList.append(createEmpty(state.memoSearch ? "没有匹配备忘" : "还没有备忘"));
       return;
     }
-    const todo = filtered.filter((note) => !note.completed);
-    const done = filtered.filter((note) => note.completed);
+    const todo = visible.filter((note) => !note.completed);
+    const done = visible.filter((note) => note.completed);
     const recentDone = done.filter(isMemoRecentlyCompleted);
     const olderDone = done.filter((note) => !isMemoRecentlyCompleted(note));
+    if (state.memoSubTab !== "done") { refs.memoList.append(createMemoGroup("待办", todo, "list")); return; }
     const groups = [
-      createMemoGroup("待办", todo, "list"),
       createMemoGroup("3天内已完成", recentDone, "list", {
         collapsible: true,
         collapsed: !state.memoRecentDoneExpanded && !state.memoSearch.trim(),
@@ -1965,7 +2402,7 @@
     item.setAttribute("aria-label", "打开备忘详情");
     item.addEventListener("click", () => openMemoDrawer(note.id));
     item.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") {
+      if (event.target !== item || (event.key !== "Enter" && event.key !== " ")) {
         return;
       }
       event.preventDefault();
@@ -1978,7 +2415,14 @@
     toggle.setAttribute("aria-label", note.completed ? "恢复待办" : "标记完成");
     toggle.addEventListener("click", async (event) => {
       event.stopPropagation();
-      await toggleMemoNote(note);
+      toggle.disabled = true;
+      try {
+        await toggleMemoNote(note);
+      } catch (error) {
+        console.error(error);
+        setToast("保存失败，任务已保留：" + error.message, true);
+        toggle.disabled = false;
+      }
     });
 
     const content = document.createElement("div");
@@ -1996,6 +2440,17 @@
     const metaLine = document.createElement("div");
     metaLine.className = "note-meta-line";
     metaLine.append(time);
+    const group = state.memoGroups.find((item) => item.id === note.groupId);
+    if (group) {
+      const label = document.createElement("span");
+      label.textContent = group.name; label.style.color = group.color; metaLine.append(label);
+    }
+    if (isMemoDelayed(note)) {
+      const delayed = document.createElement("span");
+      delayed.className = "note-delay";
+      delayed.textContent = "延期";
+      metaLine.append(delayed);
+    }
     const dueAt = normalizeMemoDueAt(note.dueAt);
     if (dueAt) {
       const due = document.createElement("span");
@@ -2007,14 +2462,7 @@
     }
     content.append(title, detail, metaLine);
 
-    const actions = document.createElement("div");
-    actions.className = "note-actions";
-    const del = makeButton("删除", "danger small", async (event) => {
-      event.stopPropagation();
-      await deleteMemoNote(note);
-    });
-    actions.append(del);
-    item.append(toggle, content, actions);
+    item.append(toggle, content);
     return item;
   }
 
@@ -2120,7 +2568,29 @@
       }
     });
     detailField.append(detailLabel, detailInput);
-    fields.append(titleField, dueField, detailField);
+    const groupField = document.createElement("label");
+    groupField.className = "field";
+    const groupLabel = document.createElement("span");
+    groupLabel.textContent = "分组";
+    const groupSelect = document.createElement("select");
+    for (const group of [{ id: "", name: "未分组" }, ...state.memoGroups]) {
+      const option = document.createElement("option");
+      option.value = group.id; option.textContent = group.name; groupSelect.append(option);
+    }
+    groupSelect.value = note.groupId || "";
+    groupSelect.addEventListener("change", async () => {
+      groupSelect.disabled = true;
+      try {
+        await api.memo.updateNote(note.id, { groupId: groupSelect.value });
+        await loadMemo(); renderMemoShell(); renderMemoListView();
+        setToast("分组已更新");
+      } catch (error) {
+        console.error(error); groupSelect.value = getMemoNoteById(note.id)?.groupId || "";
+        setToast("移动失败：" + error.message, true);
+      } finally { groupSelect.disabled = false; }
+    });
+    groupField.append(groupLabel, groupSelect);
+    fields.append(titleField, groupField, dueField, detailField);
 
     const meta = document.createElement("dl");
     meta.className = "memo-drawer-meta";
@@ -2172,9 +2642,19 @@
     document.querySelectorAll("[data-settings-tab]").forEach((button) => {
       button.classList.toggle("is-active", button.dataset.settingsTab === state.settingsTab);
     });
-    refs.settingsGeneralTab.classList.toggle("is-active", state.settingsTab === "general");
-    refs.settingsMemoTab.classList.toggle("is-active", state.settingsTab === "memo");
-    refs.settingsSmokeTab.classList.toggle("is-active", state.settingsTab === "smoke");
+    document.querySelectorAll("[data-settings-pane]").forEach((pane) => {
+      pane.classList.toggle("is-active", pane.dataset.settingsPane === state.settingsTab);
+    });
+    document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.settingsTab === state.settingsTab));
+      button.tabIndex = button.dataset.settingsTab === state.settingsTab ? 0 : -1;
+    });
+    refs.notchEnabledInput.checked = !state.config.notch || state.config.notch.enabled !== false;
+    refs.previewNotchButton.disabled = !refs.notchEnabledInput.checked;
+    refs.notchHoverDelayInput.value = (state.config.notch?.hoverDelayMs ?? 2000) / 1000;
+    const notchShortcut = state.config.shortcuts?.notch || "Alt+T";
+    refs.notchShortcutInput.dataset.accelerator = notchShortcut;
+    refs.notchShortcutInput.value = acceleratorToDisplay(notchShortcut);
 
     refs.vaultPathInput.value = state.config.vaultPath;
     refs.configDataPathText.textContent = state.config.configPath || "-";
@@ -2186,8 +2666,12 @@
     refs.smokeDataPathTextMirror.textContent = smokeDataPath;
     refs.memoDataPathTextMirror.textContent = memoDataPath;
     refs.themeSelect.value = normalizeTheme(state.config.theme);
+    refs.openAtLoginInput.checked = state.config.openAtLogin === true;
     const memoSettings = normalizeMemoSettings(state.config.memo);
     refs.quickMemoEnterToSaveInput.checked = memoSettings.quickMemoEnterToSave;
+    refs.quickMemoDateSeparatorInput.value = memoSettings.quickMemoDateSeparator;
+    $("quickMemoGroupSeparatorInput").value = state.config.memo.quickMemoGroupSeparator || "#";
+    updateQuickMemoDateSeparatorHelp();
     refs.deadlineNotifyEnabledInput.checked = memoSettings.deadlineNotify.enabled;
     refs.deadlineNotifyMacosInput.checked = memoSettings.deadlineNotify.channels.macos;
     refs.deadlineNotifyFeishuInput.checked = memoSettings.deadlineNotify.channels.feishu;
@@ -2220,7 +2704,8 @@
   async function saveShortcuts() {
     const quickMemo = refs.quickMemoShortcutInput.dataset.accelerator || "Alt+Q";
     const openMain = refs.openMainShortcutInput.dataset.accelerator || "Alt+M";
-    state.config = await api.config.setShortcuts({ quickMemo, openMain });
+    const notch = refs.notchShortcutInput.dataset.accelerator || "Alt+T";
+    state.config = await api.config.setShortcuts({ quickMemo, openMain, notch });
     renderSettings();
     setToast("快捷键已保存");
   }
@@ -2232,6 +2717,12 @@
     applyTheme(state.config.theme);
     renderSettings();
     setToast("主题已切换");
+  }
+
+  async function saveOpenAtLogin(openAtLogin) {
+    state.config = await api.config.setOpenAtLogin(openAtLogin === true);
+    renderSettings();
+    setToast(openAtLogin ? "已开启开机自启动" : "已关闭开机自启动");
   }
 
   function renderFeishuPushTimes(pushTimes) {
@@ -2261,6 +2752,71 @@
 
   function getFeishuPushTimesFromSettings() {
     return normalizePushTimes(Array.from(refs.feishuPushTimesList.querySelectorAll(".feishu-push-time-input")).map((input) => input.value));
+  }
+
+  function updateQuickMemoDateSeparatorHelp() {
+    const separator = refs.quickMemoDateSeparatorInput.value;
+    refs.quickMemoDateSeparatorHelp.textContent = separator
+      ? `示例：开发版本需求${separator}后天截止。支持 1–16 个字符，不含空格。`
+      : "输入一个识别符，例如 ---、@@ 或 #；不能包含空格。";
+  }
+
+  async function saveQuickMemoDateSeparator(separator) {
+    const input = refs.quickMemoDateSeparatorInput;
+    const status = refs.quickMemoDateSeparatorStatus;
+    if (!/^\S{1,16}$/.test(separator)) {
+      input.setAttribute("aria-invalid", "true");
+      status.textContent = "请输入 1–16 个字符，不能包含空格或换行";
+      input.focus();
+      return;
+    }
+    input.disabled = true;
+    refs.saveQuickMemoDateSeparatorButton.disabled = true;
+    refs.resetQuickMemoDateSeparatorButton.disabled = true;
+    status.textContent = "保存中…";
+    try {
+      // 只保存本项，避免把其他设置尚未保存的输入一并提交。
+      state.config = await api.config.setMemoSettings({ quickMemoDateSeparator: separator });
+      input.value = state.config.memo.quickMemoDateSeparator;
+      input.setAttribute("aria-invalid", "false");
+      updateQuickMemoDateSeparatorHelp();
+      status.textContent = "已保存，极速备忘立即使用此识别符";
+    } catch (error) {
+      console.error(error);
+      // 保存失败保留输入，允许重试，实际识别符继续使用上次成功保存的配置。
+      status.textContent = "保存失败：" + error.message;
+    } finally {
+      input.disabled = false;
+      refs.saveQuickMemoDateSeparatorButton.disabled = false;
+      refs.resetQuickMemoDateSeparatorButton.disabled = false;
+    }
+  }
+
+  async function saveNotchHoverDelay() {
+    const input = refs.notchHoverDelayInput;
+    const status = refs.notchHoverDelayStatus;
+    if (input.disabled) return;
+    if (!input.validity.valid || !Number.isFinite(input.valueAsNumber)) {
+      input.setAttribute("aria-invalid", "true");
+      status.textContent = "请输入 0–10 秒，最多一位小数";
+      input.focus();
+      return;
+    }
+    input.disabled = true;
+    refs.saveNotchHoverDelayButton.disabled = true;
+    status.textContent = "保存中…";
+    try {
+      state.config = await api.config.setNotchHoverDelay(Math.round(input.valueAsNumber * 1000));
+      input.value = state.config.notch.hoverDelayMs / 1000;
+      input.setAttribute("aria-invalid", "false");
+      status.textContent = "已保存，所有屏幕立即生效";
+    } catch (error) {
+      console.error(error);
+      status.textContent = "保存失败：" + error.message;
+    } finally {
+      input.disabled = false;
+      refs.saveNotchHoverDelayButton.disabled = false;
+    }
   }
 
   async function saveMemoSettingsFromSettings() {
@@ -2413,6 +2969,84 @@
         setSettingsTab(button.dataset.settingsTab);
         renderSettings();
       });
+      button.addEventListener("keydown", (event) => {
+        const tabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
+        const index = tabs.indexOf(button);
+        let next;
+        if (event.key === "ArrowDown" || event.key === "ArrowRight") next = (index + 1) % tabs.length;
+        if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+        if (event.key === "Home") next = 0;
+        if (event.key === "End") next = tabs.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        setSettingsTab(tabs[next].dataset.settingsTab);
+        renderSettings();
+        tabs[next].focus();
+      });
+    });
+
+    refs.textDiffLeftInput.addEventListener("input", () => {
+      state.textDiff.left = refs.textDiffLeftInput.value;
+      scheduleTextDiffCompare();
+      renderTextDiff();
+    });
+    refs.textDiffRightInput.addEventListener("input", () => {
+      state.textDiff.right = refs.textDiffRightInput.value;
+      scheduleTextDiffCompare();
+      renderTextDiff();
+    });
+    refs.textDiffModeSelect.addEventListener("change", updateTextDiffFromControls);
+    [
+      refs.textDiffIgnoreWhitespaceInput,
+      refs.textDiffIgnoreCaseInput,
+      refs.textDiffStripCrInput
+    ].forEach((input) => {
+      input.addEventListener("change", updateTextDiffFromControls);
+    });
+    [refs.textDiffSplitViewButton, refs.textDiffUnifiedViewButton].forEach((button) => {
+      button.addEventListener("click", () => {
+        state.textDiff.view = button.dataset.textDiffView === "unified" ? "unified" : "split";
+        renderTextDiff();
+      });
+    });
+    refs.swapTextDiffButton.addEventListener("click", () => {
+      const previousLeft = state.textDiff.left;
+      state.textDiff.left = state.textDiff.right;
+      state.textDiff.right = previousLeft;
+      scheduleTextDiffCompare();
+      renderTextDiff();
+    });
+    refs.clearTextDiffButton.addEventListener("click", () => {
+      window.clearTimeout(timers.get("textDiff"));
+      state.textDiff.left = "";
+      state.textDiff.right = "";
+      state.textDiff.result = null;
+      state.textDiff.error = "";
+      state.textDiff.loading = false;
+      state.textDiff.activeDiffIndex = -1;
+      state.textDiff.requestId += 1;
+      renderTextDiff();
+    });
+    refs.copyTextDiffButton.addEventListener("click", async () => {
+      try {
+        await copyTextDiffUnified();
+      } catch (error) {
+        console.error(error);
+        setToast("复制失败：" + error.message, true);
+      }
+    });
+    refs.textDiffPreviousButton.addEventListener("click", () => navigateTextDiff(-1));
+    refs.textDiffNextButton.addEventListener("click", () => navigateTextDiff(1));
+    document.addEventListener("keydown", (event) => {
+      if ((!event.metaKey && !event.ctrlKey) || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+        return;
+      }
+      const target = event.target;
+      if (event.isComposing || (target && typeof target.closest === "function" && target.closest("input, textarea, select, [contenteditable=\"true\"]"))) {
+        return;
+      }
+      event.preventDefault();
+      navigateTextDiff(event.key === "ArrowDown" ? 1 : -1);
     });
 
     refs.smokeSearchInput.addEventListener("input", () => {
@@ -2585,6 +3219,18 @@
         refs.memoForm.requestSubmit();
       }
     });
+    refs.memoSubTabs.forEach((button) => {
+      button.addEventListener("click", () => {
+        setMemoSubTab(button.dataset.memoTab);
+        renderMemo();
+      });
+    });
+    $("memoCompletedFilters").querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.memoCompletedFilter = button.dataset.completedFilter;
+        renderMemoListView();
+      });
+    });
     refs.memoInput.addEventListener("blur", () => createMemoFromComposer(false));
     refs.memoDrawerBackdrop.addEventListener("click", closeMemoDrawer);
 
@@ -2615,6 +3261,19 @@
       }
     });
     refs.testFeishuBotButton.addEventListener("click", testFeishuBot);
+    refs.quickMemoDateSeparatorInput.addEventListener("input", () => {
+      refs.quickMemoDateSeparatorInput.setAttribute("aria-invalid", "false");
+      refs.quickMemoDateSeparatorStatus.textContent = "";
+      updateQuickMemoDateSeparatorHelp();
+    });
+    refs.quickMemoDateSeparatorInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        saveQuickMemoDateSeparator(refs.quickMemoDateSeparatorInput.value);
+      }
+    });
+    refs.saveQuickMemoDateSeparatorButton.addEventListener("click", () => saveQuickMemoDateSeparator(refs.quickMemoDateSeparatorInput.value));
+    refs.resetQuickMemoDateSeparatorButton.addEventListener("click", () => saveQuickMemoDateSeparator("---"));
     refs.quickMemoEnterToSaveInput.addEventListener("change", async () => {
       try {
         await saveMemoSettingsFromSettings();
@@ -2646,6 +3305,16 @@
         setToast("主题保存失败：" + error.message, true);
       }
     });
+    refs.openAtLoginInput.addEventListener("change", async () => {
+      const previousValue = state.config && state.config.openAtLogin === true;
+      try {
+        await saveOpenAtLogin(refs.openAtLoginInput.checked);
+      } catch (error) {
+        console.error(error);
+        refs.openAtLoginInput.checked = previousValue;
+        setToast("开机自启动设置失败：" + error.message, true);
+      }
+    });
     refs.saveSmokeSettingsButton.addEventListener("click", async () => {
       try {
         await saveSmokeSettingsFromSettings();
@@ -2655,6 +3324,44 @@
       }
     });
 
+    refs.notchHoverDelayInput.addEventListener("input", () => {
+      refs.notchHoverDelayInput.setAttribute("aria-invalid", "false");
+      refs.notchHoverDelayStatus.textContent = "";
+    });
+    refs.notchHoverDelayInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        saveNotchHoverDelay();
+      }
+    });
+    refs.saveNotchHoverDelayButton.addEventListener("click", saveNotchHoverDelay);
+    refs.notchEnabledInput.addEventListener("change", async () => {
+      refs.notchEnabledInput.disabled = true;
+      try {
+        state.config = await api.config.setNotchEnabled(refs.notchEnabledInput.checked);
+        refs.previewNotchButton.disabled = !state.config.notch.enabled;
+        setToast(state.config.notch.enabled ? "刘海待办已开启" : "刘海待办已关闭");
+      } catch (error) {
+        console.error(error);
+        refs.notchEnabledInput.checked = !state.config.notch || state.config.notch.enabled !== false;
+        setToast("刘海设置保存失败：" + error.message, true);
+      } finally {
+        refs.notchEnabledInput.disabled = false;
+      }
+    });
+    refs.previewNotchButton.addEventListener("click", () => api.notch.toggle().catch((error) => {
+      console.error(error);
+      setToast("无法展开刘海：" + error.message, true);
+    }));
+    refs.saveNotchShortcutButton.addEventListener("click", async () => {
+      try {
+        await saveShortcuts();
+      } catch (error) {
+        console.error(error);
+        setToast("快捷键保存失败：" + error.message, true);
+      }
+    });
+    bindShortcutInput(refs.notchShortcutInput);
     bindShortcutInput(refs.quickMemoShortcutInput);
     bindShortcutInput(refs.openMainShortcutInput);
     refs.saveOpenMainShortcutButton.addEventListener("click", async () => {
@@ -2674,12 +3381,65 @@
       }
     });
 
+    api.config.onChanged((config) => {
+      applyTheme(config.theme);
+    });
+    api.memo.onOpenNote(async (noteId) => {
+      try {
+        await loadMemo();
+        if (!state.memoNotes.some((note) => note.id === noteId)) {
+          setToast("这条备忘已不存在", true);
+          return;
+        }
+        state.memoSearch = "";
+        refs.memoSearchInput.value = "";
+        setActiveModule("memo");
+        renderShell();
+        openMemoDrawer(noteId);
+      } catch (error) {
+        console.error(error);
+        setToast("打开备忘失败：" + error.message, true);
+      }
+    });
     if (api.memo.onChanged) {
       api.memo.onChanged(refreshMemoFromExternalChange);
     }
   }
 
+  const groupManager = window.createGroupManager({ api, getGroups: () => state.memoGroups, refresh: async () => { await loadMemo(); renderMemo(); } });
+  const memoGroupBar = window.memoGroups.createBar($("memoGroups"), {
+    onSelect(id) {
+      state.memoGroupId = id;
+      window.localStorage.setItem("personalToolbox.memoGroupId", id);
+      renderMemo();
+    },
+    onManage: () => groupManager.open()
+  });
+  async function saveGroupSeparator(value) {
+    const field = $("quickMemoGroupSeparatorInput");
+    const status = $("groupSeparatorStatus");
+    if (field.disabled) return;
+    field.disabled = true;
+    $("saveGroupSeparator").disabled = true;
+    $("resetGroupSeparator").disabled = true;
+    status.textContent = "保存中…";
+    try {
+      state.config = await api.config.setMemoSettings({ quickMemoGroupSeparator: value });
+      field.value = state.config.memo.quickMemoGroupSeparator;
+      status.textContent = "已保存，极速备忘立即生效";
+    } catch (error) { console.error(error); status.textContent = "保存失败：" + error.message; }
+    finally { field.disabled = false; $("saveGroupSeparator").disabled = false; $("resetGroupSeparator").disabled = false; }
+  }
+  $("saveGroupSeparator").addEventListener("click", () => saveGroupSeparator($("quickMemoGroupSeparatorInput").value));
+  $("resetGroupSeparator").addEventListener("click", () => saveGroupSeparator("#"));
+  $("quickMemoGroupSeparatorInput").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); saveGroupSeparator(event.target.value); } });
   bindEvents();
   timers.set("dashboard-clock", window.setInterval(renderDashboardTime, 1000));
-  reloadAll();
+  timers.set("memo-boundary", window.setInterval(() => {
+    if (state.activeModule === "memo" && !state.memoDrawerOpen) renderMemoListView();
+  }, 30000));
+  reloadAll().then(() => api.memo.ready()).catch((error) => {
+    console.error(error);
+    setToast("备忘导航初始化失败：" + error.message, true);
+  });
 })();
