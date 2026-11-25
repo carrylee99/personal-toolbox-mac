@@ -104,7 +104,9 @@
     const unscheduledCount = allPending.filter((note) => !calendar.dueKey(note)).length;
     const selected = calendar.fromKey(selectedDate);
     agendaDate.textContent = filterMode === "all" ? "全部待办" : filterMode === "unscheduled" ? "未安排" : (selected.getMonth() + 1) + "月" + selected.getDate() + "日";
-    document.getElementById("calendarHint").textContent = filterMode === "date" ? "筛选 " + agendaDate.textContent : "圆点表示有待办";
+    const calendarHint = document.getElementById("calendarHint");
+    calendarHint.textContent = calendar.lunarDate(selected);
+    calendarHint.title = selectedDate + " · " + calendarHint.textContent;
     summary.textContent = "· " + pending.length;
     summary.setAttribute("aria-label", pending.length + "项未完成待办");
     unscheduled.textContent = filterMode !== "all" ? "全部待办" : "未安排" + (unscheduledCount ? " " + unscheduledCount : "");
