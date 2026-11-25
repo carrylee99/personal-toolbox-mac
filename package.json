@@ -1,6 +1,6 @@
 {
   "name": "personal-toolbox-mac",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "记性不好 Mac App",
   "main": "electron/main.js",
   "author": "carrylee99",

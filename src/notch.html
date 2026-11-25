@@ -21,7 +21,7 @@
           </header>
           <div class="calendar-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
           <div id="calendarDays" class="calendar-days" role="group" aria-label="选择日期，方向键切换日期，Page Up 和 Page Down 切换月份"></div>
-          <footer class="calendar-footer"><button id="calendarToday" type="button">今天</button><span id="calendarHint">圆点表示有待办</span></footer>
+          <footer class="calendar-footer"><button id="calendarToday" type="button">今天</button><span id="calendarHint" aria-live="polite" aria-atomic="true"></span></footer>
         </section>
         <section class="notch-agenda" aria-label="每日待办">
           <header class="agenda-head">

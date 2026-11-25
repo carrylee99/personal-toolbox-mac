@@ -1,6 +1,21 @@
 (function (root) {
   "use strict";
 
+  const lunarFormatter = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", { month: "long", day: "numeric" });
+  const lunarDigits = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+
+  function lunarDate(date) {
+    // 沿用月历的本地日期；内置农历保留“闰月”，仅将数字日转为惯用中文。
+    const parts = lunarFormatter.formatToParts(date);
+    const month = parts.find((part) => part.type === "month").value;
+    const day = Number(parts.find((part) => part.type === "day").value);
+    const label = day <= 10 ? "初" + lunarDigits[day - 1]
+      : day < 20 ? "十" + lunarDigits[day - 11]
+      : day === 20 ? "二十"
+      : day < 30 ? "廿" + lunarDigits[day - 21] : "三十";
+    return "农历" + month + label;
+  }
+
   function dateKey(date) {
     return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
   }
@@ -36,7 +51,7 @@
     return date.getTime();
   }
 
-  const calendar = { dateKey, fromKey, dueKey, monthDays, shiftMonth, endOfDay };
+  const calendar = { dateKey, fromKey, dueKey, monthDays, shiftMonth, endOfDay, lunarDate };
   if (typeof module !== "undefined" && module.exports) module.exports = calendar;
   else root.notchCalendar = calendar;
 })(typeof window === "undefined" ? globalThis : window);
